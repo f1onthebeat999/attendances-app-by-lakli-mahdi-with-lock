@@ -301,21 +301,53 @@
     display:none; align-items:center; justify-content:center; padding:20px;
   }
   #appLockScreen.show{ display:flex; }
-  .lock-box{ max-width:360px; width:100%; text-align:center; }
-  .lock-box .lock-icon{ font-size:32px; margin-bottom:18px; opacity:.8; }
-  .lock-box h2{ font-family:var(--display); font-size:22px; font-weight:800; margin:0 0 8px; }
-  .lock-box p.sub{ font-size:13.5px; color:var(--ink-dim); margin:0 0 24px; }
+  #appLockScreen::before{
+    content:""; position:fixed; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size:64px 64px; opacity:.5; mask-image:radial-gradient(circle at 50% 40%, black, transparent 70%);
+  }
+  .lock-box{ max-width:380px; width:100%; position:relative; }
+  .lock-eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--body); font-weight:700; font-size:12px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--orange);
+    margin-bottom:18px;
+  }
+  .lock-eyebrow::before{
+    content:""; width:7px; height:7px; border-radius:50%;
+    background:var(--orange); box-shadow:0 0 0 4px var(--orange-dim);
+  }
+  .lock-box h2{ font-family:var(--display); font-weight:800; font-size:clamp(1.6rem, 4vw, 2.1rem); line-height:1.05; letter-spacing:-0.01em; margin:0 0 10px; }
+  .lock-box h2 .accent{ color:var(--orange); }
+  .lock-box p.sub{ font-size:14px; color:var(--ink-dim); margin:0 0 28px; max-width:400px; }
   .lock-box input[type="password"]{
     width:100%; background:var(--bg-raised); border:1px solid var(--line); border-radius:10px;
-    padding:13px 16px; font-size:15px; color:var(--ink); text-align:center; letter-spacing:2px;
+    padding:14px 16px; font-size:15px; color:var(--ink); letter-spacing:1px;
     font-family:var(--body); margin-bottom:14px;
   }
   .lock-box input[type="password"]:focus{ outline:none; border-color:var(--orange); }
-  .lock-box .lock-error{ font-size:12.5px; color:var(--orange); min-height:18px; margin-bottom:10px; }
-  .lock-box button{ width:100%; }
+  .lock-box .lock-error{ font-size:12.5px; color:var(--orange); min-height:18px; margin-bottom:14px; font-weight:600; }
+  .lock-box .lock-actions{ display:flex; gap:10px; }
+  .lock-box .lock-actions .btn{ flex:1; }
+  .lock-box .lock-footnote{
+    margin-top:24px; padding-top:18px; border-top:1px solid var(--line);
+    font-size:11.5px; color:var(--ink-dimmer); display:flex; align-items:center; gap:8px;
+  }
 
   #salaryLockOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
   #salaryLockOverlay.show{ display:flex; }
+  .salary-lock-box{ background:var(--bg-raised); border:1px solid var(--line); border-radius:var(--radius); padding:26px; max-width:380px; width:100%; }
+  .salary-lock-box .lock-eyebrow{ margin-bottom:14px; }
+  .salary-lock-box h3{ font-family:var(--display); font-weight:800; font-size:18px; margin:0 0 8px; }
+  .salary-lock-box p.sub{ font-size:13.5px; color:var(--ink-dim); margin:0 0 18px; }
+  .salary-lock-box input[type="password"]{
+    width:100%; background:var(--bg-raised-2); border:1px solid var(--line); border-radius:9px;
+    padding:11px 14px; font-size:14px; color:var(--ink); letter-spacing:1px;
+    font-family:var(--body); margin-bottom:10px;
+  }
+  .salary-lock-box input[type="password"]:focus{ outline:none; border-color:var(--teal); }
 
   /* ---------- validation lock banner ---------- */
   .validate-bar{
@@ -343,25 +375,30 @@
 
 <div id="appLockScreen">
   <div class="lock-box">
-    <div class="lock-icon">🔒</div>
-    <h2>Locked</h2>
-    <p class="sub">Enter the password to open this app.</p>
+    <span class="lock-eyebrow">Teaching Toolkit · Private</span>
+    <h2>This app is <span class="accent">locked</span></h2>
+    <p class="sub">Enter your password to open your classes, attendance, and pay.</p>
     <input type="password" id="appLockInput" placeholder="Password" autocomplete="off">
     <p class="lock-error" id="appLockError"></p>
-    <button class="btn primary" id="appLockSubmit">Unlock</button>
+    <div class="lock-actions">
+      <button class="btn primary" id="appLockSubmit">Unlock</button>
+    </div>
+    <div class="lock-footnote">
+      <span style="color:var(--teal)">●</span> Password checked locally on this device — never sent anywhere.
+    </div>
   </div>
 </div>
 
 <div id="salaryLockOverlay">
-  <div class="confirm-box">
-    <p class="confirm-title">Salary locked</p>
-    <p style="margin-bottom:14px">Enter the salary password to view this tab.</p>
-    <input type="password" id="salaryLockInput" placeholder="Password" autocomplete="off"
-      style="width:100%;background:var(--bg-raised-2);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--ink);text-align:center;letter-spacing:2px;margin-bottom:8px">
+  <div class="salary-lock-box">
+    <span class="lock-eyebrow" style="color:var(--teal)">Private · Salary</span>
+    <h3>Confirm it's you</h3>
+    <p class="sub">This tab has its own password, separate from the app lock.</p>
+    <input type="password" id="salaryLockInput" placeholder="Salary password" autocomplete="off">
     <p class="lock-error" id="salaryLockError"></p>
     <div class="confirm-actions">
       <button class="btn" id="salaryLockCancel">Cancel</button>
-      <button class="btn primary" id="salaryLockSubmit">Unlock</button>
+      <button class="btn teal" id="salaryLockSubmit">Unlock</button>
     </div>
   </div>
 </div>

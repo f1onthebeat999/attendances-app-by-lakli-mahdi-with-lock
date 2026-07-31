@@ -1,5 +1,7 @@
 name: Build Windows installer
 
+# Builds Setup.exe automatically in GitHub's cloud — no Windows PC needed.
+# Runs on every push to main, and can also be triggered manually from the Actions tab.
 on:
   push:
     branches: [main]
