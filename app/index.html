@@ -1,0 +1,2042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Class & Attendance Manager</title>
+
+<!-- PWA: installable app manifest + icons -->
+<meta name="theme-color" content="#0c0c0e">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Attendance">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0c0c0e;
+    --bg-raised: #17171a;
+    --bg-raised-2: #1e1e22;
+    --line: #2c2c31;
+    --line-soft: #232326;
+    --ink: #f2efe9;
+    --ink-dim: #a6a3a0;
+    --ink-dimmer: #706e6c;
+    --orange: #ff6a1f;
+    --orange-dim: #ff6a1f33;
+    --teal: #34d1b8;
+    --teal-dim: #34d1b833;
+    --core: #8c8a86;
+    --radius: 14px;
+    --display: "Archivo Expanded", sans-serif;
+    --body: "Archivo", sans-serif;
+  }
+
+  body.light{
+    --bg:#f7f5f1;
+    --bg-raised:#ffffff;
+    --bg-raised-2:#f0eee9;
+    --line:#e2ded6;
+    --line-soft:#ece9e3;
+    --ink:#18181a;
+    --ink-dim:#57544f;
+    --ink-dimmer:#8a867f;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    transition:background .3s ease, color .3s ease;
+  }
+
+  .noise{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.35) 0, transparent 100%),
+      radial-gradient(1px 1px at 80% 60%, rgba(255,255,255,0.25) 0, transparent 100%),
+      radial-gradient(1px 1px at 35% 80%, rgba(255,255,255,0.3) 0, transparent 100%),
+      radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.2) 0, transparent 100%),
+      radial-gradient(1px 1px at 90% 90%, rgba(255,255,255,0.25) 0, transparent 100%),
+      radial-gradient(1px 1px at 15% 55%, rgba(255,255,255,0.2) 0, transparent 100%);
+    background-size: 600px 600px;
+    opacity:0.5;
+  }
+  body.light .noise{ opacity:0.15; }
+
+  .wrap{ position:relative; z-index:1; max-width:min(980px, 100%); margin:0 auto; padding:0 clamp(16px, 4vw, 24px) clamp(60px, 10vw, 120px); }
+  @media (min-width:1400px){ .wrap{ max-width:1100px; } }
+  @media (min-width:1920px){ .wrap{ max-width:1280px; } body{ font-size:1.06em; } }
+
+  /* ---------- HERO ---------- */
+  .hero{ padding:clamp(40px, 8vw, 72px) 0 clamp(28px, 5vw, 44px); border-bottom:1px solid var(--line); }
+  .hero-eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--body); font-weight:700; font-size:12.5px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--orange);
+    margin-bottom:20px;
+  }
+  .hero-eyebrow::before{
+    content:""; width:7px; height:7px; border-radius:50%;
+    background:var(--orange); box-shadow:0 0 0 4px var(--orange-dim);
+  }
+  h1{ font-family:var(--display); font-weight:800; font-size:clamp(2.1rem, 5.2vw, 3.4rem); line-height:1.02; letter-spacing:-0.01em; margin:0 0 16px; }
+  h1 .accent{ color:var(--orange); }
+  .hero-sub{ font-size:16px; color:var(--ink-dim); max-width:560px; margin:0 0 30px; }
+  .hero-meta{ display:grid; grid-template-columns:repeat(4, 1fr); gap:0; border-top:1px solid var(--line); border-left:1px solid var(--line); }
+  .hero-meta-item{ border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:16px 14px; }
+  .hero-meta-item .l{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-dimmer); margin-bottom:6px; font-weight:700; }
+  .hero-meta-item .v{ font-family:var(--display); font-weight:700; font-size:16px; color:var(--ink); }
+  @media (max-width:720px){ .hero-meta{ grid-template-columns:repeat(2,1fr); } }
+
+  /* ---------- sticky rail / tabs ---------- */
+  .rail{ position:sticky; top:0; z-index:40; background:rgba(12,12,14,0.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  body.light .rail{ background:rgba(247,245,241,0.86); }
+  .rail-inner{ max-width:min(980px, 100%); margin:0 auto; padding:12px clamp(16px, 4vw, 24px); display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
+  @media (min-width:1400px){ .rail-inner{ max-width:1100px; } }
+  @media (min-width:1920px){ .rail-inner{ max-width:1280px; } }
+  .app-brand{ font-family:var(--display); font-weight:800; font-size:14px; letter-spacing:.02em; white-space:nowrap; }
+  .app-brand .dot{ color:var(--orange); }
+  .tabs{ display:flex; gap:4px; flex-wrap:wrap; }
+  .tab-btn{
+    all:unset; cursor:pointer; font-family:var(--body); font-weight:700; font-size:12.5px;
+    letter-spacing:.03em; color:var(--ink-dim); padding:8px 13px; border-radius:8px; transition:all .2s ease;
+  }
+  .tab-btn:hover{ color:var(--ink); background:var(--bg-raised-2); }
+  .tab-btn.active{ color:#0c0c0e; background:var(--orange); }
+
+  /* ---------- generic buttons/inputs ---------- */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:10px 16px; border-radius:9px; font-family:var(--body); font-weight:700; font-size:13px;
+    cursor:pointer; border:1px solid var(--line); background:var(--bg-raised-2); color:var(--ink);
+    transition:border-color .2s ease, background .2s ease, filter .2s ease; white-space:nowrap;
+  }
+  .btn:hover{ border-color:#3a3a40; }
+  .btn.primary{ background:var(--orange); color:#0c0c0e; border-color:var(--orange); }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .btn.teal{ background:var(--teal); color:#06231d; border-color:var(--teal); }
+  .btn.teal:hover{ filter:brightness(1.08); }
+  .btn.ghost{ background:transparent; }
+  .btn.danger{ color:#ff8a7a; border-color:#ff6b6b44; background:#ff6b6b14; }
+  .btn.danger:hover{ background:#ff6b6b22; }
+  .btn.small{ padding:6px 11px; font-size:11.5px; border-radius:7px; }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+  label.flabel{ font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-dimmer); font-weight:700; display:block; margin-bottom:6px; }
+  input[type=text], input[type=number], input[type=date], input[type=month], input[type=color], select, textarea{
+    background:var(--bg-raised-2); border:1px solid var(--line); color:var(--ink); border-radius:8px;
+    padding:9px 11px; font-family:var(--body); font-size:14px; width:100%;
+  }
+  input:focus, select:focus, textarea:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  input[type=color]{ padding:3px; height:38px; cursor:pointer; }
+
+  .field-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .field{ display:flex; flex-direction:column; gap:0; min-width:140px; }
+
+  .empty{ padding:30px 18px; text-align:center; color:var(--ink-dimmer); font-size:13.5px; border:1px dashed var(--line); border-radius:var(--radius); }
+
+  .section-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:44px 0 20px; flex-wrap:wrap; }
+  .section-top h2{ font-family:var(--display); font-weight:700; font-size:22px; margin:0; }
+  .section-top .sub{ font-size:13px; color:var(--ink-dimmer); margin-top:4px; }
+
+  /* ---------- class / group cards ---------- */
+  .class-card{ border:2px solid var(--class-border, var(--line)); border-radius:var(--radius); background:var(--class-bg, var(--bg-raised)); margin-bottom:14px; overflow:hidden; transition:border-color .3s ease; }
+  .class-card.open{ box-shadow:0 0 0 1px var(--class-border, var(--orange-dim)); }
+  .class-head{ display:flex; align-items:center; gap:14px; padding:16px 18px; cursor:pointer; }
+  .chev{ flex:none; width:18px; height:18px; color:var(--ink-dim); transition:transform .3s ease; }
+  .class-card.open > .class-head .chev{ transform:rotate(180deg); color:var(--orange); }
+  .ch-titles{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .title-edit{ all:unset; font-family:var(--display); font-weight:700; font-size:17px; color:var(--ink); width:100%; padding:2px 0; border-bottom:1px solid transparent; }
+  .title-edit:focus{ border-bottom:1px solid var(--orange); outline:none; }
+  .ch-meta{ font-size:11.5px; color:var(--ink-dimmer); font-weight:600; }
+  .class-body{ padding:4px 18px 20px; border-top:1px solid var(--line-soft); }
+
+  .group-card{ background:var(--class-group-bg, var(--bg-raised-2)); border:1px solid var(--class-group-border, var(--line-soft)); border-radius:10px; margin:14px 0; overflow:hidden; }
+  .group-head{ display:flex; align-items:center; gap:12px; padding:13px 15px; cursor:pointer; }
+  .group-card.open .group-head .chev{ transform:rotate(180deg); color:var(--teal); }
+  .gh-titles{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .group-title-edit{ all:unset; font-weight:700; font-size:14.5px; color:var(--ink); width:100%; border-bottom:1px solid transparent; }
+  .group-title-edit:focus{ border-bottom:1px solid var(--teal); outline:none; }
+  .gh-meta{ font-size:11px; color:var(--ink-dimmer); font-weight:600; }
+  .rate-pill{ flex:none; display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--teal); font-weight:700; background:var(--teal-dim); border:1px solid #34d1b84d; border-radius:7px; padding:5px 8px; }
+  .rate-pill input{ all:unset; width:44px; text-align:right; color:var(--teal); font-weight:700; }
+  .group-body{ padding:2px 15px 15px; border-top:1px solid var(--line-soft); }
+
+  .student-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line-soft); }
+  .student-row:first-child{ border-top:none; }
+  .student-name{ all:unset; flex:1; font-size:13.8px; color:var(--ink); border-bottom:1px solid transparent; padding:2px 0; }
+  .student-name:focus{ border-bottom:1px solid var(--orange); outline:none; }
+  .student-badge{ flex:none; width:26px; height:26px; border-radius:7px; background:var(--bg-raised); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-dimmer); }
+
+  .add-row{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+
+  /* ---------- reorder buttons ---------- */
+  .order-btns{ display:flex; flex-direction:column; gap:2px; flex:none; }
+  .order-btn{ all:unset; cursor:pointer; width:20px; height:15px; display:flex; align-items:center; justify-content:center; font-size:9px; line-height:1; color:var(--ink-dimmer); border-radius:4px; }
+  .order-btn:hover{ color:var(--orange); background:var(--bg-raised-2); }
+
+  /* ---------- per-class color ---------- */
+  .class-color-wrap{ display:flex; align-items:center; gap:4px; flex:none; }
+  .class-color-input{ width:26px; height:26px; padding:0; border:1px solid var(--line); border-radius:7px; cursor:pointer; }
+  .color-clear{ all:unset; cursor:pointer; color:var(--ink-dimmer); font-weight:800; font-size:15px; line-height:1; padding:0 3px; }
+  .color-clear:hover{ color:#ff6b6b; }
+
+  /* ---------- search tab ---------- */
+  .search-card{ border:1px solid var(--line); border-radius:12px; background:var(--bg-raised); margin-bottom:10px; overflow:hidden; }
+  .search-card-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; flex-wrap:wrap; }
+  .search-card-titles{ flex:1; min-width:140px; }
+  .search-card-name{ font-weight:700; font-size:14.5px; }
+  .search-card-meta{ font-size:11.5px; color:var(--ink-dimmer); margin-top:2px; }
+  .search-card .chev-wrap{ margin-left:auto; display:inline-flex; }
+  .search-card.open .chev{ transform:rotate(180deg); color:var(--orange); }
+  .tag{ font-size:11px; font-weight:700; padding:4px 9px; border-radius:7px; flex:none; }
+  .tag.teal{ background:var(--teal-dim); color:var(--teal); }
+  .tag.orange{ background:var(--orange-dim); color:var(--orange); }
+  .search-history{ border-top:1px solid var(--line-soft); padding:6px 16px 10px; }
+  .hist-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line-soft); font-size:13px; }
+  .hist-row:first-child{ border-top:none; }
+  .hist-source{ color:var(--ink-dimmer); font-weight:600; font-size:11px; }
+  .add-row input{ flex:1; min-width:120px; }
+
+  /* ---------- attendance ---------- */
+  .att-select-bar{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; padding:18px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-raised); margin-bottom:22px; }
+  .att-list{ border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-raised); overflow:hidden; }
+  .att-row{ display:flex; align-items:center; gap:14px; padding:13px 18px; border-top:1px solid var(--line-soft); flex-wrap:wrap; }
+  .att-row:first-child{ border-top:none; }
+  .att-row-main{ display:flex; align-items:center; gap:14px; flex:1; min-width:220px; }
+  .att-name{ flex:1; font-size:14.5px; font-weight:600; }
+  .att-remark{ flex:1 1 100%; }
+  .att-remark input{
+    width:100%; background:var(--bg-raised-2); border:1px solid var(--line); border-radius:8px;
+    padding:7px 12px; font-size:12.5px; color:var(--ink); font-family:var(--body);
+  }
+  .att-remark input::placeholder{ color:var(--ink-dimmer); }
+  .att-remark input:disabled{ cursor:not-allowed; opacity:.65; }
+  @media (min-width:700px){
+    .att-row{ flex-wrap:nowrap; }
+    .att-row-main{ flex:0 0 auto; min-width:0; width:38%; }
+    .att-remark{ flex:1 1 auto; }
+  }
+  .seg{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex:none; }
+  .seg button{ all:unset; cursor:pointer; padding:7px 14px; font-size:12px; font-weight:700; color:var(--ink-dim); background:var(--bg-raised-2); }
+  .seg button.active.present{ background:var(--teal); color:#06231d; }
+  .seg button.active.absent{ background:var(--orange); color:#2b1200; }
+  .seg button:disabled{ cursor:not-allowed; opacity:.65; }
+  .att-toolbar{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; gap:12px; flex-wrap:wrap; }
+  .att-counts{ font-size:12.5px; color:var(--ink-dim); font-weight:600; }
+  .att-counts b{ color:var(--ink); }
+  .btn.sort-btn{ display:inline-flex; align-items:center; gap:6px; }
+  .btn.sort-btn .arrow{ font-size:11px; opacity:.8; }
+
+  .callout{ border-radius:10px; padding:16px 18px; margin:18px 0; border:1px solid; font-size:14px; line-height:1.6; }
+  .callout .k{ display:block; font-size:10.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px; }
+  .callout.success{ background:var(--teal-dim); border-color:#34d1b84d; }
+  .callout.success .k{ color:var(--teal); }
+
+  /* ---------- history ---------- */
+  .lesson-row{ display:flex; align-items:center; gap:14px; padding:15px 18px; border:1px solid var(--line); border-radius:12px; background:var(--bg-raised); margin-bottom:10px; flex-wrap:wrap; }
+  .lesson-main{ flex:1; min-width:180px; }
+  .lesson-title{ font-family:var(--display); font-weight:700; font-size:14.5px; }
+  .lesson-sub{ font-size:11.5px; color:var(--ink-dimmer); margin-top:3px; }
+  .lesson-stats{ display:flex; gap:14px; font-size:12px; color:var(--ink-dim); flex-wrap:wrap; }
+  .lesson-stats b{ color:var(--ink); }
+  .lesson-actions{ display:flex; gap:6px; flex:none; }
+
+  /* ---------- salary ---------- */
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+  @media (max-width:640px){ .stat-grid{ grid-template-columns:1fr; } }
+  .stat-card{ border:1px solid var(--line); border-radius:12px; background:var(--bg-raised); padding:18px; }
+  .stat-card .l{ font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-dimmer); font-weight:700; margin-bottom:8px; }
+  .stat-card .v{ font-family:var(--display); font-weight:800; font-size:26px; color:var(--orange); }
+  .stat-card.teal .v{ color:var(--teal); }
+
+  table.breakdown{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.breakdown th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-dimmer); padding:10px 12px; border-bottom:1px solid var(--line); }
+  table.breakdown td{ padding:12px; border-bottom:1px solid var(--line-soft); }
+  table.breakdown tr:last-child td{ border-bottom:none; }
+
+  /* ---------- settings ---------- */
+  .settings-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:20px; }
+  @media (max-width:720px){ .settings-grid{ grid-template-columns:1fr; } }
+  .settings-card{ border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-raised); padding:20px; }
+  .settings-card h3{ font-family:var(--display); font-size:14.5px; margin:0 0 14px; }
+  .swatch-row{ display:flex; gap:10px; align-items:center; }
+  .theme-toggle{ display:flex; gap:8px; }
+  .theme-toggle .btn{ flex:1; }
+  .theme-toggle .btn.active{ background:var(--orange); color:#0c0c0e; border-color:var(--orange); }
+
+  footer.credit{ text-align:center; padding:50px 0 10px; color:var(--ink-dimmer); font-size:12.5px; }
+
+  /* ---------- toast ---------- */
+  #toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-raised); border:1px solid var(--orange); color:var(--ink); padding:12px 20px; border-radius:10px; font-size:13.5px; font-weight:600; z-index:100; opacity:0; pointer-events:none; transition:all .3s ease; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- confirm modal ---------- */
+  #confirmOverlay, #validateGateOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  #confirmOverlay.show, #validateGateOverlay.show{ display:flex; }
+  .confirm-box{ background:var(--bg-raised); border:1px solid var(--line); border-radius:14px; padding:24px; max-width:380px; width:100%; }
+  .confirm-box p{ font-size:14.5px; color:var(--ink); margin:0 0 20px; }
+  .confirm-actions{ display:flex; gap:10px; justify-content:flex-end; }
+  .confirm-box.wide{ max-width:440px; }
+  .confirm-actions.stacked{ flex-direction:column; align-items:stretch; }
+  .confirm-actions.stacked .btn{ width:100%; justify-content:center; }
+  .confirm-title{ font-family:var(--display); font-weight:800; font-size:17px; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .confirm-title::before{ content:"⚠"; color:var(--orange); }
+
+  /* ---------- password lock screens ---------- */
+  #appLockScreen{
+    position:fixed; inset:0; background:var(--bg); z-index:500;
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #appLockScreen.show{ display:flex; }
+  .lock-box{ max-width:360px; width:100%; text-align:center; }
+  .lock-box .lock-icon{ font-size:32px; margin-bottom:18px; opacity:.8; }
+  .lock-box h2{ font-family:var(--display); font-size:22px; font-weight:800; margin:0 0 8px; }
+  .lock-box p.sub{ font-size:13.5px; color:var(--ink-dim); margin:0 0 24px; }
+  .lock-box input[type="password"]{
+    width:100%; background:var(--bg-raised); border:1px solid var(--line); border-radius:10px;
+    padding:13px 16px; font-size:15px; color:var(--ink); text-align:center; letter-spacing:2px;
+    font-family:var(--body); margin-bottom:14px;
+  }
+  .lock-box input[type="password"]:focus{ outline:none; border-color:var(--orange); }
+  .lock-box .lock-error{ font-size:12.5px; color:var(--orange); min-height:18px; margin-bottom:10px; }
+  .lock-box button{ width:100%; }
+
+  #salaryLockOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  #salaryLockOverlay.show{ display:flex; }
+
+  /* ---------- validation lock banner ---------- */
+  .validate-bar{
+    position:sticky; bottom:0; margin-top:18px; padding:14px 16px; border-radius:12px;
+    background:var(--orange-dim); border:1px solid #ff6a1f66; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  .validate-bar .msg{ font-size:13px; font-weight:700; color:var(--ink); }
+  .validate-bar .msg .dim{ display:block; font-weight:500; color:var(--ink-dim); font-size:12px; margin-top:2px; }
+  .validate-bar .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .locked-bar{
+    margin-top:18px; padding:14px 16px; border-radius:12px;
+    background:var(--teal-dim); border:1px solid #34d1b866; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  .locked-bar .msg{ font-size:13px; font-weight:700; color:var(--ink); }
+  .locked-bar .msg .dim{ display:block; font-weight:500; color:var(--ink-dim); font-size:12px; margin-top:2px; }
+  .locked-bar .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="appLockScreen">
+  <div class="lock-box">
+    <div class="lock-icon">🔒</div>
+    <h2>Locked</h2>
+    <p class="sub">Enter the password to open this app.</p>
+    <input type="password" id="appLockInput" placeholder="Password" autocomplete="off">
+    <p class="lock-error" id="appLockError"></p>
+    <button class="btn primary" id="appLockSubmit">Unlock</button>
+  </div>
+</div>
+
+<div id="salaryLockOverlay">
+  <div class="confirm-box">
+    <p class="confirm-title">Salary locked</p>
+    <p style="margin-bottom:14px">Enter the salary password to view this tab.</p>
+    <input type="password" id="salaryLockInput" placeholder="Password" autocomplete="off"
+      style="width:100%;background:var(--bg-raised-2);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--ink);text-align:center;letter-spacing:2px;margin-bottom:8px">
+    <p class="lock-error" id="salaryLockError"></p>
+    <div class="confirm-actions">
+      <button class="btn" id="salaryLockCancel">Cancel</button>
+      <button class="btn primary" id="salaryLockSubmit">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<div class="noise"></div>
+
+<div class="rail">
+  <div class="rail-inner">
+    <span class="app-brand">Class<span class="dot">·</span>Attendance</span>
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="classes">Classes</button>
+      <button class="tab-btn" data-tab="attendance">Attendance</button>
+      <button class="tab-btn" data-tab="search">Search</button>
+      <button class="tab-btn" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="salary">Salary</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="hero">
+    <div class="hero-eyebrow">Teaching toolkit · classes &amp; payroll</div>
+    <h1>Run your <span class="accent">classes</span>,<br>track attendance &amp; pay</h1>
+    <p class="hero-sub">Build classes and groups, add your students, mark who showed up each lesson, export the sheet, and watch your earnings add up automatically.</p>
+    <div class="hero-meta" id="heroMeta"></div>
+  </section>
+
+  <!-- CLASSES TAB -->
+  <section class="panel-section" id="tab-classes">
+    <div class="section-top">
+      <div>
+        <h2>Classes &amp; groups</h2>
+        <div class="sub">Everything is extendable — add as many classes, groups and students as you need.</div>
+      </div>
+      <button class="btn primary" id="btnAddClass">+ Add class</button>
+    </div>
+
+    <div id="classesList"></div>
+  </section>
+
+  <!-- ATTENDANCE TAB -->
+  <section class="panel-section" id="tab-attendance" hidden>
+    <div class="section-top">
+      <div>
+        <h2>Take attendance</h2>
+        <div class="sub">Pick a class and group, mark who's here, then validate to save. You can't switch tabs or change group with unvalidated marks — you'll be asked to validate, export, or discard first.</div>
+      </div>
+    </div>
+
+    <div class="att-select-bar">
+      <div class="field">
+        <label class="flabel">Class</label>
+        <select id="attClass"></select>
+      </div>
+      <div class="field">
+        <label class="flabel">Group</label>
+        <select id="attGroup"></select>
+      </div>
+      <div class="field">
+        <label class="flabel">Date</label>
+        <input type="date" id="attDate">
+      </div>
+      <div class="field" style="min-width:100px">
+        <label class="flabel">Minutes</label>
+        <input type="number" id="attDuration" min="5" step="5">
+      </div>
+      <div class="field" style="min-width:100px">
+        <label class="flabel">Rate / hr</label>
+        <input type="number" id="attRate" min="0" step="0.5">
+      </div>
+    </div>
+
+    <div id="attBody"></div>
+  </section>
+
+  <!-- SEARCH TAB -->
+  <section class="panel-section" id="tab-search" hidden>
+    <div class="section-top">
+      <div>
+        <h2>Find a student</h2>
+        <div class="sub">Search by name to see their class, group, and full attendance history.</div>
+      </div>
+    </div>
+
+    <div class="settings-card" style="margin-bottom:22px">
+      <h3>Fetch old exported files</h3>
+      <p style="font-size:13px;color:var(--ink-dim);margin:0 0 12px">If you've cleared a period or you're on a new device, bring back your old attendance records here — every date they cover becomes searchable below, right back to your very first export. You'll only need this if the app's data was ever wiped or moved to a new PC; day-to-day, everything you validate is already saved and searchable automatically.</p>
+      <div class="field-row">
+        <button class="btn teal" id="btnImportAttendanceNative" hidden>Pick from auto-saved exports…</button>
+      </div>
+      <p id="importedStats" style="font-size:12px;color:var(--ink-dimmer);margin:10px 0 0">No imported records yet.</p>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 10px">Just want to clear the imported records above, keeping everything else (your classes, students, and validated lessons)?</p>
+        <button class="btn danger" id="btnClearImported">Clear imported records</button>
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:20px;max-width:360px">
+      <label class="flabel">Student name</label>
+      <input type="text" id="searchInput" placeholder="Start typing a name…">
+    </div>
+    <div id="searchResults"></div>
+  </section>
+
+  <!-- HISTORY TAB -->
+  <section class="panel-section" id="tab-history" hidden>
+    <div class="section-top">
+      <div>
+        <h2>Lesson history</h2>
+        <div class="sub">Every saved lesson, ready to export or remove.</div>
+      </div>
+      <div class="field" style="min-width:180px">
+        <select id="histFilter"></select>
+      </div>
+    </div>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- SALARY TAB -->
+  <section class="panel-section" id="tab-salary" hidden>
+    <div class="section-top">
+      <div>
+        <h2>Salary calculator</h2>
+        <div class="sub">Computed automatically from the lessons you've taught.</div>
+      </div>
+      <div class="field-row" style="align-items:center">
+        <div class="field" style="min-width:160px">
+          <select id="salaryMonth"></select>
+        </div>
+        <button class="btn danger" id="btnResetMonth">Reset this period</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="l">Total earned</div><div class="v" id="statPay">$0.00</div></div>
+      <div class="stat-card teal"><div class="l">Hours taught</div><div class="v" id="statHours">0.0h</div></div>
+      <div class="stat-card"><div class="l">Lessons logged</div><div class="v" id="statCount">0</div></div>
+    </div>
+    <div id="salaryTableWrap"></div>
+  </section>
+
+  <!-- SETTINGS TAB -->
+  <section class="panel-section" id="tab-settings" hidden>
+    <div class="section-top">
+      <div>
+        <h2>Settings</h2>
+        <div class="sub">Make it yours — colors, theme, currency, and your data.</div>
+      </div>
+    </div>
+    <div class="settings-grid">
+      <div class="settings-card">
+        <h3>Appearance</h3>
+        <div class="field" style="margin-bottom:14px">
+          <label class="flabel">Theme</label>
+          <div class="theme-toggle">
+            <button class="btn" id="btnThemeDark">Dark</button>
+            <button class="btn" id="btnThemeLight">Light</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="flabel">Primary accent</label>
+            <input type="color" id="accent1">
+          </div>
+          <div class="field">
+            <label class="flabel">Secondary accent</label>
+            <input type="color" id="accent2">
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <h3>Defaults</h3>
+        <div class="field-row">
+          <div class="field">
+            <label class="flabel">Currency symbol</label>
+            <input type="text" id="currencySym" maxlength="3">
+          </div>
+          <div class="field">
+            <label class="flabel">Default lesson length (min)</label>
+            <input type="number" id="defaultDuration" min="5" step="5">
+          </div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <h3>Your data</h3>
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px">Everything is stored right here in the app. Export a copy any time to move it to another device.</p>
+        <div class="field-row">
+          <button class="btn" id="btnExportData">Export backup (.json)</button>
+        </div>
+        <div id="nativeBackupRow" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)" hidden>
+          <p style="font-size:13px;color:var(--ink-dim);margin:0 0 10px">This app also auto-backs itself up in the background to a hidden folder on this PC — every time something changes, and every few minutes regardless. The last 5 are kept.</p>
+          <button class="btn teal" id="btnRestoreNativeBackup">Restore from auto-backup…</button>
+        </div>
+      </div>
+      <div class="settings-card">
+        <h3>Danger zone</h3>
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px">This permanently deletes every class, group, student and lesson.</p>
+        <button class="btn danger" id="btnResetAll">Reset all data</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="credit">Built for teachers who'd rather be teaching.</footer>
+
+</div>
+
+<div id="toast"></div>
+<div id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMsg"></p>
+    <div class="confirm-actions">
+      <button class="btn" id="confirmCancel">Cancel</button>
+      <button class="btn danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="validateGateOverlay">
+  <div class="confirm-box wide">
+    <p class="confirm-title">Attendance not validated</p>
+    <p id="validateGateMsg">You've marked attendance for this group but haven't validated it yet. What would you like to do?</p>
+    <div class="confirm-actions stacked">
+      <button class="btn primary" id="gateValidateBtn">Validate &amp; save lesson</button>
+      <button class="btn teal" id="gateExportBtn">Validate, save &amp; export now</button>
+      <button class="btn danger" id="gateDiscardBtn">Cancel &amp; discard changes</button>
+      <button class="btn ghost" id="gateStayBtn">Go back, keep editing</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ STORAGE ABSTRACTION ============ */
+const KEY = "attendance-app-state-v1";
+function hasWindowStorage(){ return typeof window.storage !== "undefined" && window.storage; }
+async function storageGet(key){
+  if(hasWindowStorage()){
+    try{ const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; }
+    catch(e){ return null; }
+  }
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+}
+async function storageSet(key, val){
+  if(hasWindowStorage()){
+    try{ await window.storage.set(key, JSON.stringify(val)); return; }catch(e){ /* fall through */ }
+  }
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* ignore */ }
+}
+
+/* ============ STATE ============ */
+let state = {
+  classes: [],
+  lessons: [],
+  importedLessons: [],
+  settings: { theme:"dark", accent1:"#ff6a1f", accent2:"#34d1b8", currency:"$", defaultDuration:60 }
+};
+
+function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function esc(str){ return String(str==null?"":str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtMoney(n){ return state.settings.currency + (Math.round(n*100)/100).toFixed(2); }
+
+let saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    storageSet(KEY, state);
+    saveNativeBackup(); // also mirror to the hidden AppData backups folder, debounced together
+  }, 250);
+}
+
+/* ============ NATIVE FILE BACKUP (desktop app only) ============ */
+// window.nativeFiles only exists inside the Electron desktop build (exposed by preload.js).
+// On the web/PWA versions this is simply undefined, so everything below quietly no-ops there.
+function hasNativeFiles(){ return typeof window.nativeFiles !== "undefined" && window.nativeFiles; }
+
+/* ============ APP-WIDE PASSWORD LOCK (desktop app only) ============ */
+// Shows a full-screen lock immediately; the rest of the app stays invisible underneath
+// until the correct password is entered. No-ops entirely on the web/PWA build, since
+// there's no secure place there to check a password against.
+let appLockCountdownTimer = null;
+
+function showAppLockCountdown(lockedUntil){
+  const errorEl = document.getElementById("appLockError");
+  const submitBtn = document.getElementById("appLockSubmit");
+  clearInterval(appLockCountdownTimer);
+  function tick(){
+    const remaining = Math.ceil((lockedUntil - Date.now())/1000);
+    if(remaining <= 0){
+      clearInterval(appLockCountdownTimer);
+      errorEl.textContent = "";
+      submitBtn.disabled = false;
+      return;
+    }
+    submitBtn.disabled = true;
+    errorEl.textContent = `Too many attempts — try again in ${remaining}s`;
+  }
+  tick();
+  appLockCountdownTimer = setInterval(tick, 1000);
+}
+
+async function initAppLock(){
+  if(!hasNativeFiles()) return; // web/PWA build: no lock, nothing to check
+
+  const screen = document.getElementById("appLockScreen");
+  const input = document.getElementById("appLockInput");
+  const errorEl = document.getElementById("appLockError");
+  const submitBtn = document.getElementById("appLockSubmit");
+
+  screen.classList.add("show");
+  setTimeout(()=> input.focus(), 50);
+
+  const status = await window.nativeFiles.lockStatus("app");
+  if(status && status.lockedUntil) showAppLockCountdown(status.lockedUntil);
+
+  async function attempt(){
+    const val = input.value;
+    if(!val) return;
+    submitBtn.disabled = true;
+    const res = await window.nativeFiles.verifyAppPassword(val);
+    submitBtn.disabled = false;
+    if(res && res.ok){
+      clearInterval(appLockCountdownTimer);
+      screen.classList.remove("show");
+      return;
+    }
+    input.value = "";
+    input.focus();
+    if(res && res.lockedUntil){
+      showAppLockCountdown(res.lockedUntil);
+    } else {
+      errorEl.textContent = "Incorrect password";
+    }
+  }
+  submitBtn.addEventListener("click", attempt);
+  input.addEventListener("keydown", e=>{ if(e.key === "Enter") attempt(); });
+}
+initAppLock();
+
+/* ============ SALARY PASSWORD LOCK (desktop app only) ============ */
+// Asked every time the Salary tab is opened — independent from the app-wide lock above,
+// so even someone who's past the app lock still can't see earnings without this too.
+function requestSalaryUnlock(onSuccess){
+  if(!hasNativeFiles()){ onSuccess(); return; } // web/PWA build: no lock available, just show it
+
+  const overlay = document.getElementById("salaryLockOverlay");
+  const input = document.getElementById("salaryLockInput");
+  const errorEl = document.getElementById("salaryLockError");
+  const submitBtn = document.getElementById("salaryLockSubmit");
+  const cancelBtn = document.getElementById("salaryLockCancel");
+
+  input.value = "";
+  errorEl.textContent = "";
+  overlay.classList.add("show");
+  setTimeout(()=> input.focus(), 50);
+
+  let countdownTimer = null;
+  function showCountdown(lockedUntil){
+    clearInterval(countdownTimer);
+    function tick(){
+      const remaining = Math.ceil((lockedUntil - Date.now())/1000);
+      if(remaining <= 0){ clearInterval(countdownTimer); errorEl.textContent = ""; submitBtn.disabled = false; return; }
+      submitBtn.disabled = true;
+      errorEl.textContent = `Too many attempts — try again in ${remaining}s`;
+    }
+    tick();
+    countdownTimer = setInterval(tick, 1000);
+  }
+
+  function cleanup(){
+    overlay.classList.remove("show");
+    clearInterval(countdownTimer);
+    submitBtn.removeEventListener("click", onSubmit);
+    cancelBtn.removeEventListener("click", onCancel);
+    input.removeEventListener("keydown", onKeydown);
+  }
+  async function onSubmit(){
+    const val = input.value;
+    if(!val) return;
+    submitBtn.disabled = true;
+    const res = await window.nativeFiles.verifySalaryPassword(val);
+    submitBtn.disabled = false;
+    if(res && res.ok){ cleanup(); onSuccess(); return; }
+    input.value = "";
+    input.focus();
+    if(res && res.lockedUntil){ showCountdown(res.lockedUntil); }
+    else{ errorEl.textContent = "Incorrect password"; }
+  }
+  function onCancel(){
+    cleanup();
+    // Bounce back to a safe tab rather than leaving Salary half-rendered/hidden with no way out.
+    showTab("classes");
+  }
+  function onKeydown(e){ if(e.key === "Enter") onSubmit(); }
+
+  submitBtn.addEventListener("click", onSubmit);
+  cancelBtn.addEventListener("click", onCancel);
+  input.addEventListener("keydown", onKeydown);
+}
+
+async function saveNativeBackup(){
+  if(!hasNativeFiles()) return;
+  try{
+    const res = await window.nativeFiles.saveBackup(JSON.stringify(state));
+    if(!res || !res.ok){ console.warn("Backup save failed:", res && res.error); }
+  }catch(e){ console.warn("Backup save error:", e); }
+}
+
+// Safety-net periodic backup, in addition to the on-change one above — covers the case
+// where the app is just sitting open with no edits for a while.
+const BACKUP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+if(typeof window !== "undefined"){
+  setInterval(()=>{ saveNativeBackup(); }, BACKUP_INTERVAL_MS);
+}
+
+// Opens the native "choose a backup" dialog (pointed at the hidden backups folder),
+// and if the user picks one, replaces the current app state with it.
+async function restoreFromNativeBackupPicker(){
+  if(!hasNativeFiles()){
+    showToast("Backup restore is only available in the desktop app");
+    return;
+  }
+  try{
+    const res = await window.nativeFiles.pickAndLoadBackup();
+    if(!res) return;
+    if(res.canceled) return;
+    if(!res.ok){ showToast("Couldn't read that backup file"); return; }
+    const parsed = JSON.parse(res.content);
+    if(!parsed || !Array.isArray(parsed.classes)){ showToast("That file doesn't look like a valid backup"); return; }
+    state = parsed;
+    scheduleSave();
+    renderAll();
+    showToast("Backup restored");
+  }catch(e){
+    showToast("Couldn't restore that backup");
+  }
+}
+
+/* ============ TOAST ============ */
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove("show"), 2600);
+}
+
+/* ============ CONFIRM MODAL ============ */
+function showConfirm(msg, onOk){
+  const overlay = document.getElementById("confirmOverlay");
+  document.getElementById("confirmMsg").textContent = msg;
+  overlay.classList.add("show");
+  const okBtn = document.getElementById("confirmOk");
+  const cancelBtn = document.getElementById("confirmCancel");
+  function cleanup(){
+    overlay.classList.remove("show");
+    okBtn.removeEventListener("click", okHandler);
+    cancelBtn.removeEventListener("click", cancelHandler);
+  }
+  function okHandler(){ cleanup(); onOk(); }
+  function cancelHandler(){ cleanup(); }
+  okBtn.addEventListener("click", okHandler);
+  cancelBtn.addEventListener("click", cancelHandler);
+}
+
+/* Generic modal with an arbitrary set of buttons, reusing the confirm overlay's box. */
+function showConfirmCustom({ title, msg, buttons }){
+  const overlay = document.getElementById("confirmOverlay");
+  const box = overlay.querySelector(".confirm-box");
+  const prevHTML = box.innerHTML;
+  box.classList.add("wide");
+  box.innerHTML = `
+    ${title ? `<p class="confirm-title">${esc(title)}</p>` : ""}
+    <p>${esc(msg)}</p>
+    <div class="confirm-actions stacked">
+      ${buttons.map((b,i)=>`<button class="btn ${b.cls||''}" data-cbtn="${i}">${esc(b.label)}</button>`).join("")}
+    </div>
+  `;
+  overlay.classList.add("show");
+  function cleanup(){
+    overlay.classList.remove("show");
+    box.classList.remove("wide");
+    box.innerHTML = prevHTML;
+    box.removeEventListener("click", onClick);
+  }
+  function onClick(e){
+    const btn = e.target.closest("[data-cbtn]");
+    if(!btn) return;
+    const idx = parseInt(btn.dataset.cbtn, 10);
+    cleanup();
+    if(buttons[idx] && buttons[idx].action) buttons[idx].action();
+  }
+  box.addEventListener("click", onClick);
+}
+
+/* ============ THEME ============ */
+function applyTheme(){
+  document.body.classList.toggle("light", state.settings.theme === "light");
+  const a1 = state.settings.accent1 || "#ff6a1f";
+  const a2 = state.settings.accent2 || "#34d1b8";
+  const root = document.documentElement.style;
+  root.setProperty("--orange", a1);
+  root.setProperty("--orange-dim", a1 + "33");
+  root.setProperty("--teal", a2);
+  root.setProperty("--teal-dim", a2 + "33");
+  document.getElementById("btnThemeDark").classList.toggle("active", state.settings.theme !== "light");
+  document.getElementById("btnThemeLight").classList.toggle("active", state.settings.theme === "light");
+  document.getElementById("accent1").value = a1;
+  document.getElementById("accent2").value = a2;
+  document.getElementById("currencySym").value = state.settings.currency;
+  document.getElementById("defaultDuration").value = state.settings.defaultDuration;
+}
+
+/* ============ TABS ============ */
+const tabs = ["classes","attendance","search","history","salary","settings"];
+function showTab(name){
+  tabs.forEach(t=>{
+    document.getElementById("tab-"+t).hidden = (t !== name);
+  });
+  document.querySelectorAll(".tab-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tab === name);
+  });
+  if(name === "attendance") renderAttendanceSelectors();
+  if(name === "search") renderSearchResults();
+  if(name === "history") renderHistory();
+  if(name === "salary") renderSalary();
+}
+document.getElementById("tabs").addEventListener("click", e=>{
+  const btn = e.target.closest(".tab-btn");
+  if(!btn) return;
+  const name = btn.dataset.tab;
+  // If we're currently on the attendance tab with unvalidated marks,
+  // block leaving until the teacher validates, exports, or discards.
+  const onAttendance = !document.getElementById("tab-attendance").hidden;
+  if(onAttendance && name !== "attendance" && typeof guardAttendanceNav === "function"){
+    guardAttendanceNav(()=> navigateToTab(name));
+    return;
+  }
+  navigateToTab(name);
+});
+// Every visit to Salary asks for its password again — even if the app itself is already
+// unlocked. All other tabs go straight through with no extra prompt.
+function navigateToTab(name){
+  if(name === "salary"){
+    requestSalaryUnlock(()=> showTab("salary"));
+    return;
+  }
+  showTab(name);
+}
+
+/* ============ HERO STATS ============ */
+function renderHeroStats(){
+  const classCount = state.classes.length;
+  const groupCount = state.classes.reduce((a,c)=>a+c.groups.length,0);
+  const studentCount = state.classes.reduce((a,c)=>a+c.groups.reduce((b,g)=>b+g.students.length,0),0);
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0,7);
+  const monthPay = state.lessons.filter(l=>l.date.slice(0,7)===thisMonth)
+    .reduce((a,l)=>a + (l.duration/60*l.rate), 0);
+  const items = [
+    {l:"Classes", v: classCount},
+    {l:"Groups", v: groupCount},
+    {l:"Students", v: studentCount},
+    {l:"This month", v: fmtMoney(monthPay)}
+  ];
+  document.getElementById("heroMeta").innerHTML = items.map(i=>
+    `<div class="hero-meta-item"><span class="l">${i.l}</span><span class="v">${esc(i.v)}</span></div>`
+  ).join("");
+}
+
+/* ============ CHEVRON ============ */
+function chevronSVG(){
+  return '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+}
+
+/* ============ CLASSES TAB ============ */
+function renderClasses(){
+  const root = document.getElementById("classesList");
+  if(!state.classes.length){
+    root.innerHTML = '<div class="empty">No classes yet. Click "+ Add class" to create your first one.</div>';
+    return;
+  }
+  root.innerHTML = state.classes.map(classCardHTML).join("");
+}
+
+function classCardHTML(c){
+  const studentCount = c.groups.reduce((a,g)=>a+g.students.length,0);
+  const colorStyle = c.color
+    ? `--class-border:${c.color}77;--class-bg:${c.color}14;--class-group-bg:${c.color}22;--class-group-border:${c.color}44;`
+    : "";
+  return `
+  <div class="class-card ${c.open ? "open":""}" data-class="${c.id}" style="${colorStyle}">
+    <div class="class-head" data-toggle-class="${c.id}">
+      <div class="order-btns">
+        <button type="button" class="order-btn" data-move-class-up="${c.id}" title="Move up">▲</button>
+        <button type="button" class="order-btn" data-move-class-down="${c.id}" title="Move down">▼</button>
+      </div>
+      <span class="chev-wrap">${chevronSVG()}</span>
+      <div class="ch-titles">
+        <input class="title-edit" data-rename-class="${c.id}" value="${esc(c.name)}" onclick="event.stopPropagation()">
+        <span class="ch-meta">${c.groups.length} group${c.groups.length!==1?"s":""} · ${studentCount} student${studentCount!==1?"s":""}</span>
+      </div>
+      <div class="class-color-wrap">
+        <input type="color" class="class-color-input" data-class-color="${c.id}" value="${c.color || "#3a3a40"}" title="Class color">
+        ${c.color ? `<button type="button" class="color-clear" data-class-color-clear="${c.id}" title="Remove color">×</button>` : ""}
+      </div>
+      <button class="btn small danger" data-del-class="${c.id}">Delete</button>
+    </div>
+    <div class="class-body" ${c.open ? "" : 'hidden'}>
+      <div class="groups-container" data-groups-for="${c.id}">
+        ${c.groups.map(g=>groupCardHTML(c,g)).join("")}
+      </div>
+      <form class="add-row" data-add-group="${c.id}">
+        <input type="text" placeholder="New group name (e.g. Tuesday 5pm)" required name="name">
+        <input type="number" placeholder="$/hour" step="0.5" min="0" name="rate" style="max-width:110px" required>
+        <button class="btn primary small" type="submit">+ Add group</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function groupCardHTML(c,g){
+  return `
+  <div class="group-card ${g.open ? "open":""}" data-group="${g.id}">
+    <div class="group-head" data-toggle-group="${g.id}">
+      <div class="order-btns">
+        <button type="button" class="order-btn" data-move-group-up="${g.id}" title="Move up">▲</button>
+        <button type="button" class="order-btn" data-move-group-down="${g.id}" title="Move down">▼</button>
+      </div>
+      <span class="chev-wrap">${chevronSVG()}</span>
+      <div class="gh-titles">
+        <input class="group-title-edit" data-rename-group="${g.id}" value="${esc(g.name)}" onclick="event.stopPropagation()">
+        <span class="gh-meta">${g.students.length} student${g.students.length!==1?"s":""}</span>
+      </div>
+      <label class="rate-pill" onclick="event.stopPropagation()">$<input type="number" min="0" step="0.5" data-rate-group="${g.id}" value="${g.rate}">/hr</label>
+      <button class="btn small danger" data-del-group="${g.id}" data-class-of="${c.id}">Delete</button>
+    </div>
+    <div class="group-body" ${g.open ? "" : 'hidden'}>
+      ${g.students.map(s=>`
+        <div class="student-row" data-student="${s.id}">
+          <span class="student-badge">${esc(s.name.slice(0,1).toUpperCase())}</span>
+          <input class="student-name" data-rename-student="${s.id}" value="${esc(s.name)}">
+          <button class="btn small danger" data-del-student="${s.id}" data-group-of="${g.id}">Remove</button>
+        </div>`).join("") || '<div class="empty" style="padding:16px">No students yet.</div>'}
+      <form class="add-row" data-add-student="${g.id}">
+        <input type="text" placeholder="Student name" required name="name">
+        <button class="btn teal small" type="submit">+ Add student</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function renderGroupsContainer(classId){
+  const c = findClass(classId);
+  if(!c) return;
+  const container = document.querySelector(`.groups-container[data-groups-for="${classId}"]`);
+  if(container) container.innerHTML = c.groups.map(g=>groupCardHTML(c,g)).join("");
+}
+
+function findClass(id){ return state.classes.find(c=>c.id===id); }
+function findGroup(gid){
+  for(const c of state.classes){
+    const g = c.groups.find(g=>g.id===gid);
+    if(g) return {c,g};
+  }
+  return null;
+}
+function findStudent(sid){
+  for(const c of state.classes){
+    for(const g of c.groups){
+      const s = g.students.find(s=>s.id===sid);
+      if(s) return {c,g,s};
+    }
+  }
+  return null;
+}
+
+function moveClass(classId, direction){
+  const c = findClass(classId);
+  if(!c) return;
+  const idx = state.classes.indexOf(c);
+  const newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= state.classes.length) return;
+  const tmp = state.classes[newIdx];
+  state.classes[newIdx] = c;
+  state.classes[idx] = tmp;
+  scheduleSave(); renderClasses();
+}
+
+function moveGroup(groupId, direction){
+  const info = findGroup(groupId);
+  if(!info) return;
+  const idx = info.c.groups.indexOf(info.g);
+  const newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= info.c.groups.length) return;
+  const tmp = info.c.groups[newIdx];
+  info.c.groups[newIdx] = info.g;
+  info.c.groups[idx] = tmp;
+  scheduleSave(); renderGroupsContainer(info.c.id);
+}
+
+document.getElementById("btnAddClass").addEventListener("click", ()=>{
+  state.classes.push({ id: uid("class"), name: "New Class", open: true, color: null, groups: [] });
+  scheduleSave(); renderClasses(); renderHeroStats();
+});
+
+document.getElementById("classesList").addEventListener("click", e=>{
+  const t = e.target;
+  const moveClassUp = t.closest("[data-move-class-up]");
+  const moveClassDown = t.closest("[data-move-class-down]");
+  const moveGroupUp = t.closest("[data-move-group-up]");
+  const moveGroupDown = t.closest("[data-move-group-down]");
+  if(moveClassUp){ moveClass(moveClassUp.dataset.moveClassUp, -1); return; }
+  if(moveClassDown){ moveClass(moveClassDown.dataset.moveClassDown, 1); return; }
+  if(moveGroupUp){ moveGroup(moveGroupUp.dataset.moveGroupUp, -1); return; }
+  if(moveGroupDown){ moveGroup(moveGroupDown.dataset.moveGroupDown, 1); return; }
+
+  const colorClear = t.closest("[data-class-color-clear]");
+  if(colorClear){
+    const c = findClass(colorClear.dataset.classColorClear);
+    if(c){ c.color = null; scheduleSave(); renderClasses(); }
+    return;
+  }
+  if(t.closest(".class-color-input")){ return; }
+
+  const toggleClass = t.closest("[data-toggle-class]");
+  const toggleGroup = t.closest("[data-toggle-group]");
+  const delClass = t.closest("[data-del-class]");
+  const delGroup = t.closest("[data-del-group]");
+  const delStudent = t.closest("[data-del-student]");
+
+  if(delClass){
+    const c = findClass(delClass.dataset.delClass);
+    showConfirm(`Delete class "${c.name}" and all its groups and students? Lesson history is kept.`, ()=>{
+      state.classes = state.classes.filter(x=>x.id!==c.id);
+      scheduleSave(); renderClasses(); renderHeroStats();
+      showToast("Class deleted");
+    });
+    return;
+  }
+  if(delGroup){
+    const info = findGroup(delGroup.dataset.delGroup);
+    if(info){
+      showConfirm(`Delete group "${info.g.name}" and its students? Lesson history is kept.`, ()=>{
+        info.c.groups = info.c.groups.filter(x=>x.id!==info.g.id);
+        scheduleSave(); renderClasses(); renderHeroStats();
+        showToast("Group deleted");
+      });
+    }
+    return;
+  }
+  if(delStudent){
+    const info = findGroup(delStudent.dataset.groupOf);
+    if(info){
+      const s = info.g.students.find(s=>s.id===delStudent.dataset.delStudent);
+      showConfirm(`Remove ${s ? s.name : "this student"} from the group?`, ()=>{
+        info.g.students = info.g.students.filter(x=>x.id!==delStudent.dataset.delStudent);
+        scheduleSave(); renderClasses(); renderHeroStats();
+        showToast("Student removed");
+      });
+    }
+    return;
+  }
+  if(toggleGroup){
+    const info = findGroup(toggleGroup.dataset.toggleGroup);
+    if(info){
+      info.g.open = !info.g.open;
+      scheduleSave();
+      const cardEl = toggleGroup.closest("[data-group]");
+      if(cardEl){
+        cardEl.classList.toggle("open", info.g.open);
+        const body = cardEl.querySelector(":scope > .group-body");
+        if(body) body.hidden = !info.g.open;
+      }
+    }
+    return;
+  }
+  if(toggleClass){
+    const c = findClass(toggleClass.dataset.toggleClass);
+    if(c){
+      c.open = !c.open;
+      scheduleSave();
+      const cardEl = toggleClass.closest("[data-class]");
+      if(cardEl){
+        cardEl.classList.toggle("open", c.open);
+        const body = cardEl.querySelector(":scope > .class-body");
+        if(body) body.hidden = !c.open;
+      }
+    }
+    return;
+  }
+});
+
+document.getElementById("classesList").addEventListener("submit", e=>{
+  e.preventDefault();
+  const addGroup = e.target.closest("[data-add-group]");
+  const addStudent = e.target.closest("[data-add-student]");
+  if(addGroup){
+    const c = findClass(addGroup.dataset.addGroup);
+    const name = addGroup.elements["name"].value.trim();
+    const rate = parseFloat(addGroup.elements["rate"].value) || 0;
+    if(!name || !c) return;
+    c.groups.push({ id: uid("group"), name, rate, open:true, students:[] });
+    scheduleSave(); renderClasses(); renderHeroStats();
+    showToast("Group added");
+  }
+  if(addStudent){
+    const info = findGroup(addStudent.dataset.addStudent);
+    const name = addStudent.elements["name"].value.trim();
+    if(!name || !info) return;
+    info.g.students.push({ id: uid("student"), name });
+    scheduleSave(); renderClasses(); renderHeroStats();
+    showToast("Student added");
+  }
+});
+
+document.getElementById("classesList").addEventListener("change", e=>{
+  const t = e.target;
+  if(t.matches("[data-rename-class]")){
+    const c = findClass(t.dataset.renameClass);
+    if(c){ c.name = t.value.trim() || c.name; scheduleSave(); renderHeroStats(); }
+  }
+  if(t.matches("[data-class-color]")){
+    const c = findClass(t.dataset.classColor);
+    if(c){ c.color = t.value; scheduleSave(); renderClasses(); }
+  }
+  if(t.matches("[data-rename-group]")){
+    const info = findGroup(t.dataset.renameGroup);
+    if(info){ info.g.name = t.value.trim() || info.g.name; scheduleSave(); }
+  }
+  if(t.matches("[data-rate-group]")){
+    const info = findGroup(t.dataset.rateGroup);
+    if(info){ info.g.rate = parseFloat(t.value) || 0; scheduleSave(); }
+  }
+  if(t.matches("[data-rename-student]")){
+    const row = t.closest("[data-student]");
+    const info = findStudent(row.dataset.student);
+    if(info){ info.s.name = t.value.trim() || info.s.name; scheduleSave(); }
+  }
+});
+
+/* ============ ATTENDANCE TAB ============ */
+let attTemp = {}; // studentId -> "present" | "absent"
+let attRemarks = {}; // studentId -> remark text for this lesson
+let attSortDir = "asc"; // "asc" (A→Z) or "desc" (Z→A) — display order only, doesn't affect saved records
+let attSelectionKey = "";   // classId|groupId this attTemp belongs to
+let attDirty = false;       // marks touched since last validate for this selection
+let attLockedLesson = null; // the lesson object once validated, for the pinned export bar
+
+function currentAttKey(){
+  return document.getElementById("attClass").value + "|" + document.getElementById("attGroup").value;
+}
+
+function renderAttendanceSelectors(){
+  const classSel = document.getElementById("attClass");
+  const prevClass = classSel.value;
+  classSel.innerHTML = '<option value="">Select a class…</option>' +
+    state.classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  if(state.classes.some(c=>c.id===prevClass)) classSel.value = prevClass;
+
+  if(!document.getElementById("attDate").value){
+    document.getElementById("attDate").value = new Date().toISOString().slice(0,10);
+  }
+  if(!document.getElementById("attDuration").value){
+    document.getElementById("attDuration").value = state.settings.defaultDuration;
+  }
+  populateGroupSelect();
+}
+
+/* Guard: runs `proceed` immediately if there's nothing unvalidated to lose.
+   Otherwise opens the validation gate and only runs `proceed` once the
+   teacher resolves it (validate, export, or explicitly discard). */
+function guardAttendanceNav(proceed){
+  if(!attDirty){ proceed(); return; }
+  openValidateGate(proceed);
+}
+
+function attClassChangeRequested(){
+  guardAttendanceNav(()=>{ populateGroupSelect(); });
+}
+function attGroupChangeRequested(){
+  guardAttendanceNav(()=>{ onGroupChange(); });
+}
+
+function populateGroupSelect(){
+  const classId = document.getElementById("attClass").value;
+  const groupSel = document.getElementById("attGroup");
+  const c = findClass(classId);
+  const prevGroup = groupSel.value;
+  groupSel.innerHTML = '<option value="">Select a group…</option>' +
+    (c ? c.groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("") : "");
+  if(c && c.groups.some(g=>g.id===prevGroup)) groupSel.value = prevGroup;
+  onGroupChange();
+}
+
+function onGroupChange(){
+  const groupId = document.getElementById("attGroup").value;
+  const info = findGroup(groupId);
+  const rateInput = document.getElementById("attRate");
+  if(info){ rateInput.value = info.g.rate; }
+  // fresh selection: reset temp marks, remarks, dirty flag, and any pinned lock
+  attTemp = {};
+  attRemarks = {};
+  attDirty = false;
+  attLockedLesson = null;
+  attSelectionKey = currentAttKey();
+  renderAttendanceBody();
+}
+
+document.getElementById("attClass").addEventListener("change", attClassChangeRequested);
+document.getElementById("attGroup").addEventListener("change", attGroupChangeRequested);
+
+// Safety net: warn on closing/refreshing the tab with unvalidated marks still pending.
+window.addEventListener("beforeunload", function(e){
+  if(attDirty){
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+function renderAttendanceBody(){
+  const groupId = document.getElementById("attGroup").value;
+  const info = findGroup(groupId);
+  const body = document.getElementById("attBody");
+  if(!info){
+    body.innerHTML = '<div class="empty">Choose a class and a group above to start marking attendance.</div>';
+    return;
+  }
+  if(!info.g.students.length){
+    body.innerHTML = '<div class="empty">This group has no students yet. Add students from the Classes tab.</div>';
+    return;
+  }
+  info.g.students.forEach(s=>{ if(!attTemp[s.id]) attTemp[s.id] = "present"; });
+
+  const lockedAttr = attLockedLesson ? "disabled" : "";
+
+  // Display order only — sorting never touches student IDs or saved record order.
+  const sortedStudents = [...info.g.students].sort((a,b)=>{
+    const cmp = a.name.localeCompare(b.name, undefined, { sensitivity:"base" });
+    return attSortDir === "asc" ? cmp : -cmp;
+  });
+
+  const rows = sortedStudents.map(s=>`
+    <div class="att-row" data-student="${s.id}">
+      <div class="att-row-main">
+        <span class="att-name">${esc(s.name)}</span>
+        <div class="seg" data-seg-for="${s.id}">
+          <button data-status="present" class="${attTemp[s.id]==='present' ? 'active present':''}" ${lockedAttr}>Present</button>
+          <button data-status="absent" class="${attTemp[s.id]==='absent' ? 'active absent':''}" ${lockedAttr}>Absent</button>
+        </div>
+      </div>
+      <div class="att-remark">
+        <input type="text" data-remark-for="${s.id}" placeholder="Remark for today (optional)…" value="${esc(attRemarks[s.id] || '')}" ${lockedAttr}>
+      </div>
+    </div>`).join("");
+
+  const presentCount = info.g.students.filter(s=>attTemp[s.id]!=='absent').length;
+  const absentCount = info.g.students.length - presentCount;
+
+  const bottomBar = attLockedLesson
+    ? `<div class="locked-bar" id="lockedBar">
+        <span class="msg">✓ Validated &amp; saved · ${esc(attLockedLesson.date)}
+          <span class="dim">${presentCount} present, ${absentCount} absent${hasNativeFiles() ? " · attendance TXT saved automatically to your backup folder" : " · export this lesson anytime below, or start a new one by changing class/group/date."}</span>
+        </span>
+        <div class="actions">
+          <button class="btn small teal" id="expPdfLocked">Export PDF</button>
+          ${hasNativeFiles() ? "" : '<button class="btn small teal" id="expTxtLocked">Export TXT</button>'}
+        </div>
+      </div>`
+    : `<div style="margin-top:18px;display:flex;justify-content:flex-end">
+        <button class="btn primary" id="btnSaveLesson">Validate &amp; save lesson</button>
+      </div>`;
+
+  body.innerHTML = `
+    <div class="att-list">
+      <div class="att-toolbar">
+        <span class="att-counts"><b>${presentCount}</b> present · <b>${absentCount}</b> absent</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn small sort-btn" id="btnSortNames">Sort ${attSortDir==='asc' ? 'A→Z' : 'Z→A'} <span class="arrow">${attSortDir==='asc' ? '↓' : '↑'}</span></button>
+          <button class="btn small" id="btnAllPresent" ${attLockedLesson?"disabled":""}>Mark all present</button>
+          <button class="btn small" id="btnAllAbsent" ${attLockedLesson?"disabled":""}>Mark all absent</button>
+        </div>
+      </div>
+      ${rows}
+    </div>
+    ${bottomBar}
+  `;
+
+  document.getElementById("btnSortNames").addEventListener("click", ()=>{
+    attSortDir = attSortDir === "asc" ? "desc" : "asc";
+    renderAttendanceBody();
+  });
+  document.getElementById("btnAllPresent").addEventListener("click", ()=>{
+    if(attLockedLesson) return;
+    info.g.students.forEach(s=> attTemp[s.id]="present");
+    attDirty = true;
+    renderAttendanceBody();
+  });
+  document.getElementById("btnAllAbsent").addEventListener("click", ()=>{
+    if(attLockedLesson) return;
+    info.g.students.forEach(s=> attTemp[s.id]="absent");
+    attDirty = true;
+    renderAttendanceBody();
+  });
+  body.querySelectorAll("[data-seg-for]").forEach(seg=>{
+    seg.addEventListener("click", e=>{
+      if(attLockedLesson) return;
+      const btn = e.target.closest("button");
+      if(!btn) return;
+      attTemp[seg.dataset.segFor] = btn.dataset.status;
+      attDirty = true;
+      renderAttendanceBody();
+    });
+  });
+  body.querySelectorAll("[data-remark-for]").forEach(inp=>{
+    inp.addEventListener("input", e=>{
+      if(attLockedLesson) return;
+      attRemarks[e.target.dataset.remarkFor] = e.target.value;
+      attDirty = true;
+      // no re-render here — would steal focus out of the input on every keystroke
+    });
+  });
+  if(document.getElementById("btnSaveLesson")){
+    document.getElementById("btnSaveLesson").addEventListener("click", ()=>{ saveLesson(); });
+  }
+  if(document.getElementById("expPdfLocked")){
+    document.getElementById("expPdfLocked").addEventListener("click", ()=>exportLessonPDF(attLockedLesson));
+  }
+  if(document.getElementById("expTxtLocked")){
+    document.getElementById("expTxtLocked").addEventListener("click", ()=>exportLessonTXT(attLockedLesson));
+  }
+}
+
+/* Saves the current marks as a validated lesson. Returns the lesson, or null if it couldn't save. */
+function saveLesson(){
+  const classId = document.getElementById("attClass").value;
+  const groupId = document.getElementById("attGroup").value;
+  const c = findClass(classId);
+  const info = findGroup(groupId);
+  if(!c || !info){ showToast("Pick a class and a group first"); return null; }
+  const date = document.getElementById("attDate").value || new Date().toISOString().slice(0,10);
+  const duration = parseFloat(document.getElementById("attDuration").value) || state.settings.defaultDuration;
+  const rate = parseFloat(document.getElementById("attRate").value) || info.g.rate;
+
+  const records = info.g.students.map(s=>({ studentId:s.id, name:s.name, status: attTemp[s.id]==='absent' ? 'absent':'present', remark: (attRemarks[s.id] || '').trim() }));
+  const lesson = {
+    id: uid("lesson"), classId: c.id, groupId: info.g.id,
+    className: c.name, groupName: info.g.name,
+    date, duration, rate, records, createdAt: Date.now()
+  };
+  state.lessons.push(lesson);
+  scheduleSave();
+  renderHeroStats();
+  saveLessonTxtNatively(lesson); // desktop app: silently drops the TXT into the hidden exports folder
+
+  attDirty = false;
+  attLockedLesson = lesson;
+  showToast(hasNativeFiles() ? "Lesson validated, saved & exported" : "Lesson validated & saved");
+  renderAttendanceBody();
+  return lesson;
+}
+
+/* ============ VALIDATION GATE (blocks leaving unvalidated attendance) ============ */
+function openValidateGate(proceedFn){
+  const overlay = document.getElementById("validateGateOverlay");
+  overlay.classList.add("show");
+
+  const validateBtn = document.getElementById("gateValidateBtn");
+  const exportBtn = document.getElementById("gateExportBtn");
+  const discardBtn = document.getElementById("gateDiscardBtn");
+  const stayBtn = document.getElementById("gateStayBtn");
+
+  function cleanup(){
+    overlay.classList.remove("show");
+    validateBtn.removeEventListener("click", onValidate);
+    exportBtn.removeEventListener("click", onExport);
+    discardBtn.removeEventListener("click", onDiscard);
+    stayBtn.removeEventListener("click", onStay);
+  }
+  function onValidate(){
+    const lesson = saveLesson();
+    cleanup();
+    if(lesson) proceedFn();
+  }
+  function onExport(){
+    const lesson = saveLesson();
+    cleanup();
+    if(lesson){
+      openExportChoice(lesson, ()=> proceedFn());
+    } else {
+      proceedFn();
+    }
+  }
+  function onDiscard(){
+    // revert: drop the unsaved marks and remarks entirely and allow navigation
+    attTemp = {};
+    attRemarks = {};
+    attDirty = false;
+    attLockedLesson = null;
+    cleanup();
+    showToast("Changes discarded");
+    proceedFn();
+  }
+  function onStay(){
+    cleanup(); // do nothing further — teacher stays on the current sheet to keep editing
+  }
+  validateBtn.addEventListener("click", onValidate);
+  exportBtn.addEventListener("click", onExport);
+  discardBtn.addEventListener("click", onDiscard);
+  stayBtn.addEventListener("click", onStay);
+}
+
+function openExportChoice(lesson, afterFn){
+  showConfirmCustom({
+    title: "Export lesson",
+    msg: "Saved. How would you like to export it?",
+    buttons: [
+      { label:"Export PDF", cls:"primary", action:()=>{ exportLessonPDF(lesson); afterFn(); } },
+      { label:"Export TXT", cls:"teal", action:()=>{ exportLessonTXT(lesson); afterFn(); } },
+      { label:"Skip for now", cls:"ghost", action:()=>{ afterFn(); } }
+    ]
+  });
+}
+
+/* ============ SEARCH TAB ============ */
+function getStudentHistory(sid){
+  const info = findStudent(sid);
+  if(!info) return [];
+  const live = state.lessons
+    .filter(l=>l.groupId === info.g.id)
+    .map(l=>{
+      const rec = l.records.find(r=>r.studentId===sid);
+      return rec ? { date:l.date, status:rec.status, source:"app" } : null;
+    })
+    .filter(Boolean);
+
+  const cName = info.c.name.trim().toLowerCase();
+  const gName = info.g.name.trim().toLowerCase();
+  const sName = info.s.name.trim().toLowerCase();
+  const imported = (state.importedLessons||[])
+    .filter(l => l.className.trim().toLowerCase()===cName && l.groupName.trim().toLowerCase()===gName)
+    .flatMap(l => l.records.filter(r=>r.name.trim().toLowerCase()===sName).map(r=>({ date:l.date, status:r.status, source:"imported" })));
+
+  const byDate = {};
+  [...imported, ...live].forEach(h=>{ byDate[h.date] = h; }); // live entries pushed last, override imported on same date
+  return Object.values(byDate).sort((a,b)=> a.date < b.date ? 1 : (a.date > b.date ? -1 : 0));
+}
+
+function renderSearchResults(){
+  const input = document.getElementById("searchInput");
+  const q = input.value.trim().toLowerCase();
+  const root = document.getElementById("searchResults");
+  if(!q){
+    root.innerHTML = '<div class="empty">Type a student\'s name above to find them.</div>';
+    return;
+  }
+  const matches = [];
+  state.classes.forEach(c=>{
+    c.groups.forEach(g=>{
+      g.students.forEach(s=>{
+        if(s.name.toLowerCase().includes(q)) matches.push({c,g,s});
+      });
+    });
+  });
+  if(!matches.length){
+    root.innerHTML = '<div class="empty">No students match that search.</div>';
+    return;
+  }
+  root.innerHTML = matches.map(m=>{
+    const history = getStudentHistory(m.s.id);
+    const presentCount = history.filter(h=>h.status==='present').length;
+    const absentCount = history.filter(h=>h.status==='absent').length;
+    return `
+    <div class="search-card">
+      <div class="search-card-head" data-toggle-history="${m.s.id}">
+        <span class="student-badge">${esc(m.s.name.slice(0,1).toUpperCase())}</span>
+        <div class="search-card-titles">
+          <div class="search-card-name">${esc(m.s.name)}</div>
+          <div class="search-card-meta">${esc(m.c.name)} · ${esc(m.g.name)}</div>
+        </div>
+        <span class="tag teal">${presentCount} present</span>
+        <span class="tag orange">${absentCount} absent</span>
+        <span class="chev-wrap">${chevronSVG()}</span>
+      </div>
+      <div class="search-history" hidden>
+        ${history.length ? history.map(h=>`
+          <div class="hist-row">
+            <span>${esc(h.date)}${h.source==='imported' ? ' <span class="hist-source">(imported)</span>' : ''}</span>
+            <span class="tag ${h.status==='present'?'teal':'orange'}">${h.status==='present'?'Present':'Absent'}</span>
+          </div>`).join("") : '<div class="empty" style="padding:14px">No lessons recorded yet for this student.</div>'}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+document.getElementById("searchInput").addEventListener("input", renderSearchResults);
+// Desktop app only: lets the teacher pick straight from the hidden auto-saved exports folder
+// via a native Windows file dialog, instead of hunting for the file manually.
+if(hasNativeFiles()){
+  document.getElementById("btnImportAttendanceNative").hidden = false;
+}
+document.getElementById("btnImportAttendanceNative").addEventListener("click", async ()=>{
+  const res = await window.nativeFiles.pickAndLoadAttendanceTxt();
+  if(!res || res.canceled) return;
+  if(!res.ok){ showToast("Couldn't read that file"); return; }
+  const parsed = parseAttendanceTxt(res.content);
+  if(!parsed){ showToast("That file doesn't look like an attendance export"); return; }
+  state.importedLessons = state.importedLessons || [];
+  const key = parsed.className+"|"+parsed.groupName+"|"+parsed.date;
+  const existingKeys = new Set(state.importedLessons.map(l => l.className+"|"+l.groupName+"|"+l.date));
+  if(existingKeys.has(key)){
+    showToast("That attendance record is already imported");
+    return;
+  }
+  state.importedLessons.push(Object.assign({ id: uid("imp") }, parsed));
+  scheduleSave();
+  renderImportedStats();
+  if(document.getElementById("searchInput")) renderSearchResults();
+  showToast("Imported 1 attendance record");
+});
+document.getElementById("searchResults").addEventListener("click", e=>{
+  const head = e.target.closest("[data-toggle-history]");
+  if(!head) return;
+  const card = head.closest(".search-card");
+  const panel = card.querySelector(".search-history");
+  const chev = head.querySelector(".chev-wrap");
+  panel.hidden = !panel.hidden;
+  card.classList.toggle("open", !panel.hidden);
+});
+
+/* ============ HISTORY TAB ============ */
+function renderHistory(){
+  const filterSel = document.getElementById("histFilter");
+  const prev = filterSel.value;
+  filterSel.innerHTML = '<option value="all">All classes</option>' +
+    state.classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  filterSel.value = state.classes.some(c=>c.id===prev) ? prev : "all";
+
+  const list = document.getElementById("historyList");
+  let lessons = [...state.lessons].sort((a,b)=>b.createdAt-a.createdAt);
+  if(filterSel.value !== "all") lessons = lessons.filter(l=>l.classId===filterSel.value);
+
+  if(!lessons.length){
+    list.innerHTML = '<div class="empty">No lessons recorded yet. Save one from the Attendance tab.</div>';
+    return;
+  }
+  list.innerHTML = lessons.map(l=>{
+    const present = l.records.filter(r=>r.status==='present').length;
+    const absent = l.records.length - present;
+    const pay = l.duration/60*l.rate;
+    return `
+    <div class="lesson-row" data-lesson="${l.id}">
+      <div class="lesson-main">
+        <div class="lesson-title">${esc(l.className)} · ${esc(l.groupName)}</div>
+        <div class="lesson-sub">${esc(l.date)} · ${l.duration} min</div>
+      </div>
+      <div class="lesson-stats">
+        <span><b>${present}</b> present</span>
+        <span><b>${absent}</b> absent</span>
+        <span><b>${fmtMoney(pay)}</b> earned</span>
+      </div>
+      <div class="lesson-actions">
+        <button class="btn small" data-hist-pdf="${l.id}">PDF</button>
+        <button class="btn small" data-hist-txt="${l.id}">TXT</button>
+        <button class="btn small danger" data-hist-del="${l.id}">Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+document.getElementById("histFilter").addEventListener("change", renderHistory);
+document.getElementById("historyList").addEventListener("click", e=>{
+  const pdfBtn = e.target.closest("[data-hist-pdf]");
+  const txtBtn = e.target.closest("[data-hist-txt]");
+  const delBtn = e.target.closest("[data-hist-del]");
+  if(pdfBtn){ const l = state.lessons.find(x=>x.id===pdfBtn.dataset.histPdf); if(l) exportLessonPDF(l); }
+  if(txtBtn){ const l = state.lessons.find(x=>x.id===txtBtn.dataset.histTxt); if(l) exportLessonTXT(l); }
+  if(delBtn){
+    showConfirm("Delete this lesson from history? This also removes it from salary totals.", ()=>{
+      state.lessons = state.lessons.filter(x=>x.id!==delBtn.dataset.histDel);
+      scheduleSave(); renderHistory(); renderHeroStats();
+      showToast("Lesson deleted");
+    });
+  }
+});
+
+/* ============ SALARY TAB ============ */
+function renderSalary(){
+  const monthSel = document.getElementById("salaryMonth");
+  const months = Array.from(new Set(state.lessons.map(l=>l.date.slice(0,7)))).sort().reverse();
+  const currentMonth = new Date().toISOString().slice(0,7);
+  const prev = monthSel.value;
+  monthSel.innerHTML = '<option value="all">All time</option>' + months.map(m=>`<option value="${m}">${m}</option>`).join("");
+  if(months.includes(prev)) monthSel.value = prev;
+  else if(months.includes(currentMonth)) monthSel.value = currentMonth;
+  else monthSel.value = "all";
+
+  let lessons = state.lessons;
+  if(monthSel.value !== "all") lessons = lessons.filter(l=>l.date.slice(0,7)===monthSel.value);
+
+  const totalMinutes = lessons.reduce((a,l)=>a+l.duration,0);
+  const totalPay = lessons.reduce((a,l)=>a + (l.duration/60*l.rate), 0);
+  document.getElementById("statPay").textContent = fmtMoney(totalPay);
+  document.getElementById("statHours").textContent = (totalMinutes/60).toFixed(1) + "h";
+  document.getElementById("statCount").textContent = lessons.length;
+
+  const wrap = document.getElementById("salaryTableWrap");
+  if(!lessons.length){
+    wrap.innerHTML = '<div class="empty">No lessons in this period yet.</div>';
+    return;
+  }
+  const label = monthSel.value === "all" ? "All time" : monthSel.value;
+  wrap.innerHTML = `
+    <div class="callout success">
+      <span class="k">${esc(label)}</span>
+      You taught <b>${(totalMinutes/60).toFixed(1)} hours</b> across <b>${lessons.length} lesson${lessons.length!==1?"s":""}</b>, for a total of <b>${fmtMoney(totalPay)}</b>.
+    </div>`;
+}
+document.getElementById("salaryMonth").addEventListener("change", renderSalary);
+
+document.getElementById("btnResetMonth").addEventListener("click", ()=>{
+  const monthSel = document.getElementById("salaryMonth");
+  const period = monthSel.value;
+  const affected = period === "all" ? state.lessons : state.lessons.filter(l=>l.date.slice(0,7)===period);
+  if(!affected.length){ showToast("Nothing to reset for this period"); return; }
+  const label = period === "all" ? "all time" : period;
+  const pay = affected.reduce((a,l)=>a + (l.duration/60*l.rate), 0);
+  showConfirm(`Clear ${affected.length} lesson${affected.length!==1?"s":""} from ${label} (${fmtMoney(pay)})? This removes them from salary and history — your classes, groups and students are untouched.`, ()=>{
+    const ids = new Set(affected.map(l=>l.id));
+    state.lessons = state.lessons.filter(l=>!ids.has(l.id));
+    scheduleSave();
+    renderSalary(); renderHistory(); renderHeroStats();
+    showToast("Period reset");
+  });
+});
+
+/* ============ SETTINGS TAB ============ */
+document.getElementById("btnThemeDark").addEventListener("click", ()=>{ state.settings.theme="dark"; scheduleSave(); applyTheme(); });
+document.getElementById("btnThemeLight").addEventListener("click", ()=>{ state.settings.theme="light"; scheduleSave(); applyTheme(); });
+document.getElementById("accent1").addEventListener("input", e=>{ state.settings.accent1 = e.target.value; scheduleSave(); applyTheme(); });
+document.getElementById("accent2").addEventListener("input", e=>{ state.settings.accent2 = e.target.value; scheduleSave(); applyTheme(); });
+document.getElementById("currencySym").addEventListener("input", e=>{ state.settings.currency = e.target.value || "$"; scheduleSave(); renderHeroStats(); });
+document.getElementById("defaultDuration").addEventListener("input", e=>{ state.settings.defaultDuration = parseFloat(e.target.value) || 60; scheduleSave(); });
+
+document.getElementById("btnExportData").addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  downloadBlob(blob, `attendance-backup-${new Date().toISOString().slice(0,10)}.json`);
+  showToast("Backup downloaded");
+});
+// The native auto-backup row only makes sense inside the desktop app (window.nativeFiles
+// only exists there); the PWA/web versions never see this button.
+if(hasNativeFiles()){
+  document.getElementById("nativeBackupRow").hidden = false;
+}
+document.getElementById("btnRestoreNativeBackup").addEventListener("click", ()=>{
+  showConfirm("Restore from a backup? This replaces all current data with whatever's in the file you pick.", ()=>{
+    restoreFromNativeBackupPicker();
+  });
+});
+document.getElementById("btnResetAll").addEventListener("click", ()=>{
+  showConfirm("This deletes every class, group, student, lesson, and imported attendance record permanently. Continue?", ()=>{
+    state = { classes:[], lessons:[], importedLessons:[], settings: state.settings };
+    scheduleSave(); renderAll();
+    showToast("All data cleared");
+  });
+});
+document.getElementById("btnClearImported").addEventListener("click", ()=>{
+  showConfirm("Clear all imported .txt attendance records? Your classes, groups, students and live lessons are untouched.", ()=>{
+    state.importedLessons = [];
+    scheduleSave();
+    renderImportedStats();
+    if(document.getElementById("searchInput")) renderSearchResults();
+    showToast("Imported records cleared");
+  });
+});
+
+/* ============ EXPORT: TXT ============ */
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildLessonTxtContent(lesson){
+  const present = lesson.records.filter(r=>r.status==='present');
+  const absent = lesson.records.filter(r=>r.status==='absent');
+  const pay = lesson.duration/60*lesson.rate;
+  const lines = [];
+  lines.push("ATTENDANCE SHEET");
+  lines.push("================");
+  lines.push(`Class: ${lesson.className}`);
+  lines.push(`Group: ${lesson.groupName}`);
+  lines.push(`Date: ${lesson.date}`);
+  lines.push(`Duration: ${lesson.duration} minutes`);
+  lines.push(`Rate: ${fmtMoney(lesson.rate)}/hr`);
+  lines.push(`Earned: ${fmtMoney(pay)}`);
+  lines.push("");
+  lines.push(`PRESENT (${present.length})`);
+  present.forEach((r,i)=> lines.push(`  ${i+1}. ${r.name}${r.remark ? `  — ${r.remark}` : ""}`));
+  lines.push("");
+  lines.push(`ABSENT (${absent.length})`);
+  absent.forEach((r,i)=> lines.push(`  ${i+1}. ${r.name}${r.remark ? `  — ${r.remark}` : ""}`));
+  lines.push("");
+  lines.push(`Generated on ${new Date().toLocaleString()}`);
+  lines.push("");
+  lines.push(".");
+  lines.push(`##ATTENDANCE_APP_DATA## ${JSON.stringify({
+    className: lesson.className, groupName: lesson.groupName, date: lesson.date,
+    duration: lesson.duration, rate: lesson.rate, records: lesson.records
+  })}`);
+  return lines.join("\n");
+}
+function lessonTxtFilename(lesson){
+  return `Attendance_${slug(lesson.className)}_${slug(lesson.groupName)}_${lesson.date}.txt`;
+}
+function exportLessonTXT(lesson){
+  const blob = new Blob([buildLessonTxtContent(lesson)], {type:"text/plain"});
+  downloadBlob(blob, lessonTxtFilename(lesson));
+}
+// Desktop app only: silently writes the TXT straight into the hidden attendance-exports
+// folder instead of triggering a browser download. No-ops on the web/PWA build.
+async function saveLessonTxtNatively(lesson){
+  if(!hasNativeFiles()) return;
+  try{
+    const res = await window.nativeFiles.saveAttendanceTxt(lessonTxtFilename(lesson), buildLessonTxtContent(lesson));
+    if(!res || !res.ok){ console.warn("Attendance TXT save failed:", res && res.error); }
+  }catch(e){ console.warn("Attendance TXT save error:", e); }
+}
+
+function slug(str){ return String(str).replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,""); }
+
+/* ============ IMPORT OLD EXPORTED FILES (for search history) ============ */
+function parseAttendanceTxt(text){
+  const markerMatch = text.match(/##ATTENDANCE_APP_DATA##\s*({.*})\s*$/m);
+  if(markerMatch){
+    try{
+      const d = JSON.parse(markerMatch[1]);
+      if(d && d.className && d.date && Array.isArray(d.records)){
+        return { className:d.className, groupName:d.groupName||"", date:d.date, duration:d.duration||0, rate:d.rate||0, records:d.records };
+      }
+    }catch(e){ /* fall through to text parsing */ }
+  }
+
+  const lines = text.split(/\r?\n/);
+  const get = (label) => {
+    const line = lines.find(l => l.trim().toLowerCase().startsWith(label.toLowerCase()));
+    return line ? line.split(":").slice(1).join(":").trim() : "";
+  };
+  const className = get("Class:");
+  const groupName = get("Group:");
+  const date = get("Date:");
+  if(!className || !date) return null;
+  const durationLine = get("Duration:");
+  const duration = parseFloat(durationLine) || 0;
+  const rateLine = get("Rate:");
+  const rate = parseFloat((rateLine.match(/[\d.]+/) || [0])[0]) || 0;
+
+  const records = [];
+  let mode = null;
+  for(const raw of lines){
+    const line = raw.trim();
+    if(/^PRESENT\s*\(/i.test(line)){ mode = "present"; continue; }
+    if(/^ABSENT\s*\(/i.test(line)){ mode = "absent"; continue; }
+    if(!line){ continue; }
+    const m = line.match(/^\d+\.\s*(.+)$/);
+    if(m && mode){ records.push({ studentId:null, name:m[1].trim(), status:mode }); }
+  }
+  if(!records.length) return null;
+  return { className, groupName, date, duration, rate, records };
+}
+
+function importAttendanceFiles(fileList){
+  const files = Array.from(fileList).filter(f => /\.txt$/i.test(f.name));
+  if(!files.length){ showToast("Choose exported .txt attendance files"); return; }
+  let added = 0, failed = 0;
+  let pending = files.length;
+  state.importedLessons = state.importedLessons || [];
+  const existingKeys = new Set(state.importedLessons.map(l => l.className+"|"+l.groupName+"|"+l.date));
+
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const parsed = parseAttendanceTxt(reader.result);
+      if(parsed){
+        const key = parsed.className+"|"+parsed.groupName+"|"+parsed.date;
+        if(!existingKeys.has(key)){
+          existingKeys.add(key);
+          state.importedLessons.push(Object.assign({ id: uid("imp") }, parsed));
+          added++;
+        }
+      } else {
+        failed++;
+      }
+      pending--;
+      if(pending === 0) finishImport();
+    };
+    reader.onerror = ()=>{ failed++; pending--; if(pending===0) finishImport(); };
+    reader.readAsText(file);
+  });
+
+  function finishImport(){
+    scheduleSave();
+    renderImportedStats();
+    if(document.getElementById("searchInput")) renderSearchResults();
+    if(added && !failed) showToast(`Imported ${added} attendance record${added!==1?"s":""}`);
+    else if(added && failed) showToast(`Imported ${added}, couldn't read ${failed} file${failed!==1?"s":""}`);
+    else showToast("Couldn't read any of those files — make sure they're exported attendance .txt files");
+  }
+}
+
+function renderImportedStats(){
+  const el = document.getElementById("importedStats");
+  if(!el) return;
+  const count = (state.importedLessons||[]).length;
+  el.textContent = count ? `${count} imported record${count!==1?"s":""} available to search.` : "No imported records yet.";
+}
+
+/* ============ EXPORT: PDF ============ */
+let jsPdfLoading = null;
+function ensureJsPDF(){
+  if(window.jspdf) return Promise.resolve();
+  if(jsPdfLoading) return jsPdfLoading;
+  jsPdfLoading = new Promise((resolve,reject)=>{
+    const s = document.createElement("script");
+    s.src = "vendor/jspdf.umd.min.js"; // bundled locally so PDF export works fully offline
+    s.onload = resolve;
+    s.onerror = ()=>{
+      // fallback for plain web hosting without the vendor folder present
+      const s2 = document.createElement("script");
+      s2.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s2.onload = resolve;
+      s2.onerror = reject;
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+  return jsPdfLoading;
+}
+
+async function exportLessonPDF(lesson){
+  try{
+    await ensureJsPDF();
+  }catch(e){
+    showToast("Couldn't load the PDF library — check your internet connection");
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const present = lesson.records.filter(r=>r.status==='present');
+  const absent = lesson.records.filter(r=>r.status==='absent');
+  const pay = lesson.duration/60*lesson.rate;
+
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(18);
+  doc.text("Attendance Sheet", 14, 20);
+
+  doc.setFontSize(11);
+  doc.setFont("helvetica","normal");
+  let y = 32;
+  const meta = [
+    `Class: ${lesson.className}`,
+    `Group: ${lesson.groupName}`,
+    `Date: ${lesson.date}`,
+    `Duration: ${lesson.duration} minutes`,
+    `Rate: ${fmtMoney(lesson.rate)}/hr   Earned: ${fmtMoney(pay)}`
+  ];
+  meta.forEach(line=>{ doc.text(line, 14, y); y += 7; });
+
+  y += 4;
+  doc.setLineWidth(0.2);
+  doc.line(14, y, 196, y);
+  y += 10;
+
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(13);
+  doc.text(`Present (${present.length})`, 14, y);
+  y += 8;
+  doc.setFont("helvetica","normal");
+  doc.setFontSize(11);
+  present.forEach((r,i)=>{
+    if(y > 275){ doc.addPage(); y = 20; }
+    doc.text(`${i+1}. ${r.name}`, 18, y);
+    y += 7;
+    if(r.remark){
+      if(y > 275){ doc.addPage(); y = 20; }
+      doc.setFontSize(9);
+      doc.setTextColor(120,120,120);
+      const wrapped = doc.splitTextToSize(r.remark, 170);
+      wrapped.forEach(line=>{
+        if(y > 275){ doc.addPage(); y = 20; }
+        doc.text(line, 24, y);
+        y += 5.5;
+      });
+      doc.setFontSize(11);
+      doc.setTextColor(0,0,0);
+    }
+  });
+
+  y += 6;
+  if(y > 265){ doc.addPage(); y = 20; }
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(13);
+  doc.text(`Absent (${absent.length})`, 14, y);
+  y += 8;
+  doc.setFont("helvetica","normal");
+  doc.setFontSize(11);
+  absent.forEach((r,i)=>{
+    if(y > 275){ doc.addPage(); y = 20; }
+    doc.text(`${i+1}. ${r.name}`, 18, y);
+    y += 7;
+    if(r.remark){
+      if(y > 275){ doc.addPage(); y = 20; }
+      doc.setFontSize(9);
+      doc.setTextColor(120,120,120);
+      const wrapped = doc.splitTextToSize(r.remark, 170);
+      wrapped.forEach(line=>{
+        if(y > 275){ doc.addPage(); y = 20; }
+        doc.text(line, 24, y);
+        y += 5.5;
+      });
+      doc.setFontSize(11);
+      doc.setTextColor(0,0,0);
+    }
+  });
+
+  y += 10;
+  if(y > 280){ doc.addPage(); y = 20; }
+  doc.setFontSize(9);
+  doc.setTextColor(140,140,140);
+  doc.text(`Generated on ${new Date().toLocaleString()}`, 14, y);
+
+  doc.save(`Attendance_${slug(lesson.className)}_${slug(lesson.groupName)}_${lesson.date}.pdf`);
+}
+
+/* ============ INIT ============ */
+function renderAll(){
+  renderHeroStats();
+  renderClasses();
+  renderAttendanceSelectors();
+  attTemp = {};
+  attRemarks = {};
+  attDirty = false;
+  attLockedLesson = null;
+  renderAttendanceBody();
+  renderHistory();
+  renderSalary();
+  renderImportedStats();
+  applyTheme();
+  const searchInput = document.getElementById("searchInput");
+  if(searchInput){ searchInput.value = ""; renderSearchResults(); }
+}
+
+async function init(){
+  const saved = await storageGet(KEY);
+  if(saved && typeof saved === "object"){
+    state.classes = Array.isArray(saved.classes) ? saved.classes : [];
+    state.lessons = Array.isArray(saved.lessons) ? saved.lessons : [];
+    state.importedLessons = Array.isArray(saved.importedLessons) ? saved.importedLessons : [];
+    state.settings = Object.assign(state.settings, saved.settings || {});
+  }
+  applyTheme();
+  renderHeroStats();
+  renderClasses();
+  renderAttendanceSelectors();
+  renderAttendanceBody();
+  renderImportedStats();
+  renderSearchResults();
+}
+init();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "name": "class-attendance-manager",
+  "version": "1.0.0",
+  "description": "Class & Attendance Manager — desktop app",
+  "main": "main.js",
+  "author": "Your Name",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.yourname.attendancemanager",
+    "productName": "Class & Attendance Manager",
+    "asar": true,
+    "publish": null,
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "app/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Class & Attendance Manager",
+      "differentialPackage": false
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "app/icons/icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "app/icons/icon-512.png",
+      "category": "Education"
+    }
+  }
+}
