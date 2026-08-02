@@ -101,7 +101,8 @@
   @media (max-width:720px){ .hero-meta{ grid-template-columns:repeat(2,1fr); } }
 
   /* ---------- sticky rail / tabs ---------- */
-  .rail{ position:sticky; top:0; z-index:40; background:rgba(12,12,14,0.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  .top-stack{ position:sticky; top:0; z-index:40; }
+  .rail{ background:rgba(12,12,14,0.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
   body.light .rail{ background:rgba(247,245,241,0.86); }
   .rail-inner{ max-width:min(980px, 100%); margin:0 auto; padding:12px clamp(16px, 4vw, 24px); display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
   @media (min-width:1400px){ .rail-inner{ max-width:1100px; } }
@@ -135,7 +136,7 @@
   .btn:disabled{ opacity:.4; cursor:not-allowed; }
 
   label.flabel{ font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-dimmer); font-weight:700; display:block; margin-bottom:6px; }
-  input[type=text], input[type=number], input[type=date], input[type=month], input[type=color], select, textarea{
+  input[type=text], input[type=number], input[type=date], input[type=month], input[type=color], input[type=password].plain, select, textarea{
     background:var(--bg-raised-2); border:1px solid var(--line); color:var(--ink); border-radius:8px;
     padding:9px 11px; font-family:var(--body); font-size:14px; width:100%;
   }
@@ -414,6 +415,7 @@
 
 <div class="noise"></div>
 
+<div class="top-stack">
 <div id="updateBanner">
   <span><span class="dot"></span> <span id="updateBannerText">A new version is ready.</span></span>
   <button class="btn small primary" id="btnInstallUpdate">Install &amp; restart</button>
@@ -432,6 +434,7 @@
       <button class="tab-btn" data-tab="settings">Settings</button>
     </nav>
   </div>
+</div>
 </div>
 
 <div class="wrap">
@@ -610,6 +613,32 @@
           <div class="field-row">
             <button class="btn teal" id="btnRestoreNativeBackup">Restore from auto-backup…</button>
             <button class="btn" id="btnRestoreCloudBackup" hidden>Restore from cloud backup…</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-card" id="securityCard" hidden>
+        <h3>Security</h3>
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 16px">Change either lock's password. You'll need to enter the current one first — checked locally, never sent anywhere.</p>
+
+        <div>
+          <label class="flabel">App lock password</label>
+          <div class="field" style="margin-bottom:8px"><input type="password" class="plain" id="pwAppOld" placeholder="Current password" autocomplete="off"></div>
+          <div class="field" style="margin-bottom:8px"><input type="password" class="plain" id="pwAppNew" placeholder="New password" autocomplete="off"></div>
+          <div class="field" style="margin-bottom:10px"><input type="password" class="plain" id="pwAppConfirm" placeholder="Confirm new password" autocomplete="off"></div>
+          <div class="field-row" style="align-items:center">
+            <button class="btn teal" id="btnChangeAppPw">Update app password</button>
+            <span id="pwAppMsg" style="font-size:12px;color:var(--ink-dim)"></span>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
+          <label class="flabel">Salary tab password</label>
+          <div class="field" style="margin-bottom:8px"><input type="password" class="plain" id="pwSalaryOld" placeholder="Current password" autocomplete="off"></div>
+          <div class="field" style="margin-bottom:8px"><input type="password" class="plain" id="pwSalaryNew" placeholder="New password" autocomplete="off"></div>
+          <div class="field" style="margin-bottom:10px"><input type="password" class="plain" id="pwSalaryConfirm" placeholder="Confirm new password" autocomplete="off"></div>
+          <div class="field-row" style="align-items:center">
+            <button class="btn teal" id="btnChangeSalaryPw">Update salary password</button>
+            <span id="pwSalaryMsg" style="font-size:12px;color:var(--ink-dim)"></span>
           </div>
         </div>
       </div>
@@ -2100,12 +2129,57 @@ document.getElementById("btnExportData").addEventListener("click", ()=>{
 // only exists there); the PWA/web versions never see this button.
 if(hasNativeFiles()){
   document.getElementById("nativeBackupRow").hidden = false;
+  document.getElementById("securityCard").hidden = false;
 }
 document.getElementById("btnRestoreNativeBackup").addEventListener("click", ()=>{
   showConfirm("Restore from a backup? This replaces all current data with whatever's in the file you pick.", ()=>{
     restoreFromNativeBackupPicker();
   });
 });
+
+/* ---- Change password (app lock + salary lock) ---- */
+function wireChangePassword(lockName, oldId, newId, confirmId, btnId, msgId){
+  const btn = document.getElementById(btnId);
+  const msgEl = document.getElementById(msgId);
+  if(!btn) return;
+  btn.addEventListener("click", async ()=>{
+    const oldEl = document.getElementById(oldId);
+    const newEl = document.getElementById(newId);
+    const confirmEl = document.getElementById(confirmId);
+    const oldPassword = oldEl.value;
+    const newPassword = newEl.value;
+    const confirmPassword = confirmEl.value;
+
+    msgEl.style.color = "var(--orange)";
+    if(!oldPassword){ msgEl.textContent = "Enter your current password."; return; }
+    if(newPassword.length < 4){ msgEl.textContent = "New password must be at least 4 characters."; return; }
+    if(newPassword !== confirmPassword){ msgEl.textContent = "New passwords don't match."; return; }
+
+    btn.disabled = true;
+    msgEl.style.color = "var(--ink-dim)";
+    msgEl.textContent = "Updating…";
+    const res = await window.nativeFiles.changeLockPassword(lockName, oldPassword, newPassword);
+    btn.disabled = false;
+
+    if(res && res.ok){
+      msgEl.style.color = "var(--teal)";
+      msgEl.textContent = "Password updated.";
+      oldEl.value = ""; newEl.value = ""; confirmEl.value = "";
+    } else {
+      msgEl.style.color = "var(--orange)";
+      const err = res && res.error;
+      msgEl.textContent = err === "wrong_password" ? "That current password is wrong."
+        : err === "locked" ? "Too many attempts — try again in a bit."
+        : err === "too_short" ? "New password must be at least 4 characters."
+        : "Couldn't update password.";
+    }
+  });
+}
+if(hasNativeFiles()){
+  wireChangePassword("app", "pwAppOld", "pwAppNew", "pwAppConfirm", "btnChangeAppPw", "pwAppMsg");
+  wireChangePassword("salary", "pwSalaryOld", "pwSalaryNew", "pwSalaryConfirm", "btnChangeSalaryPw", "pwSalaryMsg");
+}
+
 document.getElementById("btnResetAll").addEventListener("click", ()=>{
   showConfirm("This deletes every class, group, student, lesson, and imported attendance record permanently. Continue?", ()=>{
     state = { classes:[], lessons:[], importedLessons:[], settings: state.settings };

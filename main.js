@@ -620,6 +620,22 @@ ipcMain.handle("lock:status", async (event, lockName) => {
   return { lockedUntil: data.lockedUntil && data.lockedUntil > now ? data.lockedUntil : 0 };
 });
 
+// Requires the correct current password before setting a new one — the old lock
+// stays in force until it's actually confirmed, same failed-attempt/lockout rules apply.
+ipcMain.handle("lock:changePassword", async (event, { lockName, oldPassword, newPassword }) => {
+  const defaultPassword = lockName === "salary" ? SALARY_LOCK_DEFAULT_PASSWORD : APP_LOCK_DEFAULT_PASSWORD;
+  const verify = verifyPassword(lockName, defaultPassword, oldPassword || "");
+  if (!verify.ok) {
+    return { ok: false, error: verify.lockedUntil ? "locked" : "wrong_password", lockedUntil: verify.lockedUntil };
+  }
+  if (!newPassword || newPassword.length < 4) {
+    return { ok: false, error: "too_short" };
+  }
+  const salt = crypto.randomBytes(16).toString("hex");
+  writeLockFile(lockName, { hash: hashPassword(newPassword, salt), salt, failedAttempts: 0, lockedUntil: 0 });
+  return { ok: true };
+});
+
 // ---------- IPC: GitHub cloud sync ----------
 ipcMain.handle("gh:startDeviceFlow", async () => {
   try {

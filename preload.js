@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   verifyAppPassword: (attempt) => ipcRenderer.invoke("lock:verifyApp", attempt),
   verifySalaryPassword: (attempt) => ipcRenderer.invoke("lock:verifySalary", attempt),
   lockStatus: (lockName) => ipcRenderer.invoke("lock:status", lockName),
+  changeLockPassword: (lockName, oldPassword, newPassword) =>
+    ipcRenderer.invoke("lock:changePassword", { lockName, oldPassword, newPassword }),
 
   // Auto-update: main.js checks GitHub Releases in the background and downloads
   // silently, but only ever installs when the person clicks the button that calls
