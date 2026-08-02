@@ -803,7 +803,7 @@ if(hasNativeFiles()){
     btnCheckUpdateNow.disabled = false;
   });
   window.nativeFiles.onUpdateError((info)=>{
-    updateCheckStatus.textContent = "Couldn't check for updates. Check your internet connection.";
+    updateCheckStatus.textContent = "Couldn't check for updates — " + (info && info.message ? info.message : "unknown error");
     btnCheckUpdateNow.disabled = false;
   });
 
@@ -812,7 +812,7 @@ if(hasNativeFiles()){
     updateCheckStatus.textContent = "Checking for updates…";
     const res = await window.nativeFiles.checkForUpdatesNow();
     if(res && res.ok === false){
-      updateCheckStatus.textContent = "Couldn't check for updates. Check your internet connection.";
+      updateCheckStatus.textContent = "Couldn't check for updates — " + (res.error || "unknown error");
       btnCheckUpdateNow.disabled = false;
     }
     // If res.ok, the checking-for-update/update-available/update-not-available/error
