@@ -663,7 +663,6 @@
           <p style="font-size:12px;color:var(--ink-dim);margin:0 0 14px" id="cloudSyncLastSynced"></p>
           <div class="field-row">
             <button class="btn" id="btnCloudSyncNow">Sync now</button>
-            <button class="btn ghost" id="btnCloudReconcile">Catch up missing backups/exports…</button>
             <button class="btn ghost" id="btnCloudDisconnect">Disconnect</button>
           </div>
           <p id="cloudReconcileStatus" style="font-size:12px;color:var(--ink-dim);margin:8px 0 0"></p>
@@ -1008,23 +1007,6 @@ if(hasNativeFiles()){
   document.getElementById("btnCloudSyncNow").addEventListener("click", async ()=>{
     lastSyncedEl.textContent = "Syncing…";
     await cloudSyncNow();
-  });
-
-  document.getElementById("btnCloudReconcile").addEventListener("click", async ()=>{
-    const btn = document.getElementById("btnCloudReconcile");
-    const statusEl = document.getElementById("cloudReconcileStatus");
-    btn.disabled = true;
-    statusEl.textContent = "Checking for anything missing from the cloud…";
-    const res = await window.nativeFiles.reconcileCloudFiles();
-    btn.disabled = false;
-    if(!res || !res.ok){
-      statusEl.textContent = "Couldn't check: " + (res && res.error ? res.error : "unknown error");
-      return;
-    }
-    const total = res.pushedBackups + res.pushedTxt;
-    statusEl.textContent = total === 0
-      ? "Everything's already caught up."
-      : `Pushed ${res.pushedBackups} backup(s) and ${res.pushedTxt} attendance export(s) that were missing.`;
   });
 
   document.getElementById("btnCloudDisconnect").addEventListener("click", async ()=>{
@@ -1670,6 +1652,7 @@ let attSortDir = "asc"; // "asc" (A→Z) or "desc" (Z→A) — display order onl
 let attSelectionKey = "";   // classId|groupId this attTemp belongs to
 let attDirty = false;       // marks touched since last validate for this selection
 let attLockedLesson = null; // the lesson object once validated, for the pinned export bar
+let attEditingExisting = null; // set when this date already has a saved lesson we've pre-filled — form stays editable
 
 function currentAttKey(){
   return document.getElementById("attClass").value + "|" + document.getElementById("attGroup").value;
@@ -1705,6 +1688,9 @@ function attClassChangeRequested(){
 function attGroupChangeRequested(){
   guardAttendanceNav(()=>{ onGroupChange(); });
 }
+function attDateChangeRequested(){
+  guardAttendanceNav(()=>{ onGroupChange(); });
+}
 
 function populateGroupSelect(){
   const classId = document.getElementById("attClass").value;
@@ -1717,22 +1703,53 @@ function populateGroupSelect(){
   onGroupChange();
 }
 
+// Finds a previously validated lesson for exactly this class + group + date, if any.
+function findExistingLessonForSelection(){
+  const classId = document.getElementById("attClass").value;
+  const groupId = document.getElementById("attGroup").value;
+  const date = document.getElementById("attDate").value;
+  if(!classId || !groupId || !date) return null;
+  return state.lessons.find(l => l.classId===classId && l.groupId===groupId && l.date===date) || null;
+}
+
 function onGroupChange(){
   const groupId = document.getElementById("attGroup").value;
   const info = findGroup(groupId);
   const rateInput = document.getElementById("attRate");
-  if(info){ rateInput.value = info.g.rate; }
-  // fresh selection: reset temp marks, remarks, dirty flag, and any pinned lock
+  const durationInput = document.getElementById("attDuration");
+
   attTemp = {};
   attRemarks = {};
-  attDirty = false;
+
+  // If this exact class+group+date already has a validated lesson, load its original
+  // marks, remarks, duration and rate — so correcting it starts from what was actually
+  // recorded, and only whatever you deliberately change will affect salary. Without
+  // this, duration/rate would silently fall back to today's defaults/current group
+  // rate, and unmarked students would default to "present" regardless of what they
+  // originally were.
+  const existing = findExistingLessonForSelection();
+  if(existing){
+    existing.records.forEach(r=>{
+      if(r.status === "absent") attTemp[r.studentId] = "absent";
+      if(r.remark) attRemarks[r.studentId] = r.remark;
+    });
+    if(durationInput) durationInput.value = existing.duration;
+    if(rateInput) rateInput.value = existing.rate;
+    attEditingExisting = existing; // keeps the form editable — this only informs the UI note + saveLesson's replace logic
+  } else {
+    if(info && rateInput) rateInput.value = info.g.rate;
+    attEditingExisting = null;
+  }
   attLockedLesson = null;
+
+  attDirty = false;
   attSelectionKey = currentAttKey();
   renderAttendanceBody();
 }
 
 document.getElementById("attClass").addEventListener("change", attClassChangeRequested);
 document.getElementById("attGroup").addEventListener("change", attGroupChangeRequested);
+document.getElementById("attDate").addEventListener("change", attDateChangeRequested);
 
 // Safety net: warn on closing/refreshing the tab with unvalidated marks still pending.
 window.addEventListener("beforeunload", function(e){
@@ -1792,10 +1809,17 @@ function renderAttendanceBody(){
         </div>
       </div>`
     : `<div style="margin-top:18px;display:flex;justify-content:flex-end">
-        <button class="btn primary" id="btnSaveLesson">Validate &amp; save lesson</button>
+        <button class="btn primary" id="btnSaveLesson">${attEditingExisting ? "Save correction" : "Validate &amp; save lesson"}</button>
       </div>`;
 
+  const editingNote = (attEditingExisting && !attLockedLesson)
+    ? `<div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:var(--teal-dim,rgba(52,209,184,.12));border:1px solid var(--teal);font-size:12.5px;color:var(--ink-dim)">
+        Editing the already-validated lesson for this date — loaded with its original marks, duration &amp; rate. Saving updates it in place (won't create a duplicate or change any other day's pay).
+      </div>`
+    : "";
+
   body.innerHTML = `
+    ${editingNote}
     <div class="att-list">
       <div class="att-toolbar">
         <span class="att-counts"><b>${presentCount}</b> present · <b>${absentCount}</b> absent</span>
@@ -1892,6 +1916,7 @@ function saveLesson(){
 
   attDirty = false;
   attLockedLesson = lesson;
+  attEditingExisting = null;
   const verb = isCorrection ? "Lesson corrected" : "Lesson validated";
   showToast(hasNativeFiles() ? `${verb}, saved & exported` : `${verb} & saved`);
   renderAttendanceBody();
@@ -1935,6 +1960,7 @@ function openValidateGate(proceedFn){
     attRemarks = {};
     attDirty = false;
     attLockedLesson = null;
+    attEditingExisting = null;
     cleanup();
     showToast("Changes discarded");
     proceedFn();
@@ -2525,6 +2551,7 @@ function renderAll(){
   attRemarks = {};
   attDirty = false;
   attLockedLesson = null;
+  attEditingExisting = null;
   renderAttendanceBody();
   renderHistory();
   renderSalary();
