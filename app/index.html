@@ -1037,11 +1037,15 @@ if(hasNativeFiles()){
     try{
       const res = await window.nativeFiles.reconcileCloudFiles();
       if(res && res.ok){
-        const total = res.pushedBackups + res.pushedTxt;
+        const pushed = res.pushedBackups + res.pushedTxt;
+        const pulled = res.pulledBackups + res.pulledTxt;
         const statusEl = document.getElementById("cloudReconcileStatus");
-        if(total > 0){
-          if(statusEl) statusEl.textContent = `Auto-caught up ${res.pushedBackups} backup(s) and ${res.pushedTxt} export(s) just now.`;
-          showToast(`Synced ${total} file(s) to the cloud`);
+        if(pushed + pulled > 0){
+          const parts = [];
+          if(pulled > 0) parts.push(`pulled ${res.pulledBackups} backup(s) & ${res.pulledTxt} export(s) from the cloud`);
+          if(pushed > 0) parts.push(`pushed ${res.pushedBackups} backup(s) & ${res.pushedTxt} export(s) up`);
+          if(statusEl) statusEl.textContent = "Just now: " + parts.join(", ") + ".";
+          showToast(`Synced ${pushed + pulled} file(s) with the cloud`);
         }
       }
     }catch(e){ /* silent — next 15s cycle retries */ }

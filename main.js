@@ -735,34 +735,53 @@ ipcMain.handle("gh:fetchCloudFile", async (event, filePath) => {
   }
 });
 
-// Catches up the cloud repo with any local backups/exports that never made it up —
-// e.g. from a past silent failure. Only pushes what's missing by filename; doesn't
-// try to detect stale content in files that already exist on both sides.
+// Keeps local backups/attendance-exports and the cloud repo as a union of both —
+// whatever's missing on either side gets copied to the other. This is what actually
+// populates a brand-new PC: sign in, and everything that's sitting in the cloud
+// (backups, attendance TXTs) gets pulled down into the same hidden local folders.
 ipcMain.handle("gh:reconcileLocalFiles", async () => {
   const session = getGhSession();
   if (!session) return { ok: false, error: "not_connected" };
   try {
-    let pushedBackups = 0, pushedTxt = 0;
+    let pushedBackups = 0, pulledBackups = 0, pushedTxt = 0, pulledTxt = 0;
 
-    const localBackupFiles = fs.readdirSync(backupsDir()).filter((f) => f.startsWith("backup-") && f.endsWith(".json"));
-    const cloudBackupNames = (await ghListFolder(session.token, session.meta.login, "backups")).map((f) => f.name);
+    const localBackupDir = backupsDir();
+    const localBackupFiles = fs.readdirSync(localBackupDir).filter((f) => f.startsWith("backup-") && f.endsWith(".json"));
+    const cloudBackupFiles = await ghListFolder(session.token, session.meta.login, "backups");
+    const cloudBackupNames = cloudBackupFiles.map((f) => f.name);
+
     for (const name of localBackupFiles) {
       if (cloudBackupNames.includes(name)) continue;
-      const content = fs.readFileSync(path.join(backupsDir(), name), "utf-8");
+      const content = fs.readFileSync(path.join(localBackupDir, name), "utf-8");
       await queueCloudOp(() => ghPutFile(session.token, session.meta.login, `backups/${name}`, Buffer.from(content, "utf-8"), `Backup ${name} (reconciled)`, null));
       pushedBackups++;
     }
-
-    const localTxtFiles = fs.readdirSync(attendanceTxtDir()).filter((f) => f.endsWith(".txt"));
-    const cloudTxtNames = (await ghListFolder(session.token, session.meta.login, "attendance-exports")).map((f) => f.name);
-    for (const name of localTxtFiles) {
-      if (cloudTxtNames.includes(name)) continue;
-      const content = fs.readFileSync(path.join(attendanceTxtDir(), name), "utf-8");
-      await queueCloudOp(() => ghPutFile(session.token, session.meta.login, `attendance-exports/${name}`, Buffer.from(content, "utf-8"), `Attendance export ${name} (reconciled)`, null));
-      pushedTxt++;
+    for (const f of cloudBackupFiles) {
+      if (localBackupFiles.includes(f.name)) continue;
+      const content = await ghFetchFileContent(session.token, session.meta.login, f.path);
+      fs.writeFileSync(path.join(localBackupDir, f.name), content, "utf-8");
+      pulledBackups++;
     }
 
-    return { ok: true, pushedBackups, pushedTxt };
+    const localTxtDir = attendanceTxtDir();
+    const localTxtFiles = fs.readdirSync(localTxtDir).filter((f) => f.endsWith(".txt"));
+    const cloudTxtFiles = await ghListFolder(session.token, session.meta.login, "attendance-exports");
+    const cloudTxtNames = cloudTxtFiles.map((f) => f.name);
+
+    for (const name of localTxtFiles) {
+      if (cloudTxtNames.includes(name)) continue;
+      const content = fs.readFileSync(path.join(localTxtDir, name), "utf-8");
+      await queueCloudOp(() => cloudPushAttendanceTxt(name, content));
+      pushedTxt++;
+    }
+    for (const f of cloudTxtFiles) {
+      if (localTxtFiles.includes(f.name)) continue;
+      const content = await ghFetchFileContent(session.token, session.meta.login, f.path);
+      fs.writeFileSync(path.join(localTxtDir, f.name), content, "utf-8");
+      pulledTxt++;
+    }
+
+    return { ok: true, pushedBackups, pulledBackups, pushedTxt, pulledTxt };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
