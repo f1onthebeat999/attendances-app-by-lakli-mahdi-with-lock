@@ -4,9 +4,10 @@
 // The renderer (index.html) never touches the filesystem directly — it asks
 // this process to do it via IPC (see preload.js for the bridge).
 
-const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog, safeStorage } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const crypto = require("crypto");
 const { autoUpdater } = require("electron-updater");
 
@@ -147,6 +148,204 @@ function verifyPassword(lockName, defaultPassword, attempt) {
 
 const APP_LOCK_DEFAULT_PASSWORD = "1234";     // change via lock-app.json — see README
 const SALARY_LOCK_DEFAULT_PASSWORD = "1234";  // change via lock-salary.json — see README
+
+// ---------- GitHub cloud sync ----------
+// Sign-in via GitHub's Device Flow (no client secret needed — safe to ship this ID).
+// Register your own at github.com/settings/developers -> OAuth Apps -> enable "Device Flow".
+const GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_OAUTH_APP_CLIENT_ID";
+
+// Each signed-in user gets exactly one auto-created private repo under their own
+// account. We never touch anyone else's repos, and never see their password —
+// only a token they can revoke any time from github.com/settings/applications.
+const SYNC_REPO_NAME = "attendance-manager-cloud-data";
+const SYNC_FILE_PATH = "state.json";
+
+function ghTokenFilePath() { return path.join(app.getPath("userData"), "gh-token.enc"); }
+function ghMetaFilePath() { return path.join(app.getPath("userData"), "gh-sync-meta.json"); }
+
+// The token can read/write the user's private repo, so it's encrypted at rest using
+// the OS's own credential store (Windows DPAPI / macOS Keychain / Linux libsecret)
+// instead of sitting around as plain text.
+function saveGithubToken(token) {
+  const file = ghTokenFilePath();
+  if (safeStorage.isEncryptionAvailable()) {
+    fs.writeFileSync(file, safeStorage.encryptString(token));
+  } else {
+    // Rare (e.g. some bare-bones Linux setups with no keyring) — fall back rather
+    // than silently failing to sign in at all.
+    fs.writeFileSync(file, "PLAIN:" + token, "utf-8");
+  }
+}
+function loadGithubToken() {
+  try {
+    const buf = fs.readFileSync(ghTokenFilePath());
+    const str = buf.toString("utf-8");
+    if (str.startsWith("PLAIN:")) return str.slice(6);
+    return safeStorage.decryptString(buf);
+  } catch (e) {
+    return null;
+  }
+}
+function readGhMeta() {
+  try { return JSON.parse(fs.readFileSync(ghMetaFilePath(), "utf-8")); }
+  catch (e) { return null; }
+}
+function writeGhMeta(meta) {
+  fs.writeFileSync(ghMetaFilePath(), JSON.stringify(meta, null, 2), "utf-8");
+}
+function clearGithubSession() {
+  try { fs.unlinkSync(ghTokenFilePath()); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(ghMetaFilePath()); } catch (e) { /* ignore */ }
+}
+
+function ghApiHeaders(token) {
+  return {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "class-attendance-manager"
+  };
+}
+async function ghRequest(token, path, options = {}) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    ...options,
+    headers: { ...ghApiHeaders(token), ...(options.headers || {}) }
+  });
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* some responses have no body */ }
+  return { status: res.status, ok: res.ok, body };
+}
+
+// ---- Sign-in (Device Flow) ----
+async function ghStartDeviceFlow() {
+  const res = await fetch("https://github.com/login/device/code", {
+    method: "POST",
+    headers: { "Accept": "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, scope: "repo" })
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error_description || "Couldn't start GitHub sign-in");
+  return data; // { device_code, user_code, verification_uri, expires_in, interval }
+}
+
+async function ghPollForToken(deviceCode, intervalSeconds, expiresInSeconds) {
+  const deadline = Date.now() + expiresInSeconds * 1000;
+  let interval = intervalSeconds;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval * 1000));
+    const res = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        device_code: deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+      })
+    });
+    const data = await res.json();
+    if (data.access_token) return { ok: true, token: data.access_token };
+    if (data.error === "authorization_pending") continue;
+    if (data.error === "slow_down") { interval += 5; continue; }
+    if (data.error === "expired_token") return { ok: false, reason: "expired" };
+    if (data.error === "access_denied") return { ok: false, reason: "denied" };
+    return { ok: false, reason: data.error || "unknown_error" };
+  }
+  return { ok: false, reason: "expired" };
+}
+
+async function ghGetUser(token) {
+  const r = await ghRequest(token, "/user");
+  if (!r.ok) throw new Error("Couldn't read your GitHub account info");
+  return r.body; // includes .login
+}
+
+// Creates the user's private "room" the first time they sign in; reuses it after that.
+async function ghEnsureSyncRepo(token, owner) {
+  const check = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}`);
+  if (check.ok) return check.body;
+  const create = await ghRequest(token, "/user/repos", {
+    method: "POST",
+    body: JSON.stringify({
+      name: SYNC_REPO_NAME,
+      private: true,
+      description: "Private data storage for Class & Attendance Manager — auto-created, safe to leave alone.",
+      auto_init: true
+    })
+  });
+  if (!create.ok) throw new Error("Couldn't create your private sync repo on GitHub");
+  return create.body;
+}
+
+// ---- Reading/writing the synced data file ----
+async function ghGetRemoteState(token, owner) {
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${SYNC_FILE_PATH}`);
+  if (r.status === 404) return { exists: false, sha: null, wrapper: null };
+  if (!r.ok) throw new Error("Couldn't read your cloud data");
+  const raw = Buffer.from(r.body.content, "base64").toString("utf-8");
+  let wrapper = null;
+  try { wrapper = JSON.parse(raw); } catch (e) { /* treat as empty if unreadable */ }
+  return { exists: true, sha: r.body.sha, wrapper };
+}
+
+async function ghPutRemoteState(token, owner, wrapperObj, sha) {
+  const content = Buffer.from(JSON.stringify(wrapperObj, null, 2), "utf-8").toString("base64");
+  const body = {
+    message: `Sync from ${os.hostname()} — ${new Date(wrapperObj.updatedAt).toISOString()}`,
+    content
+  };
+  if (sha) body.sha = sha;
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${SYNC_FILE_PATH}`, {
+    method: "PUT",
+    body: JSON.stringify(body)
+  });
+  if (r.status === 409) return { ok: false, conflict: true };
+  if (!r.ok) return { ok: false, conflict: false, error: (r.body && r.body.message) || `HTTP ${r.status}` };
+  return { ok: true, sha: r.body.content.sha };
+}
+
+// The actual two-way sync. GitHub's file SHA doubles as our conflict check: if
+// another PC pushed since we last looked, our push is rejected instead of quietly
+// overwriting their changes, and we pull theirs down instead.
+async function performSync(localStateJson) {
+  const token = loadGithubToken();
+  const meta = readGhMeta();
+  if (!token || !meta) return { ok: false, error: "not_connected" };
+
+  const localState = JSON.parse(localStateJson);
+  const remote = await ghGetRemoteState(token, meta.login);
+
+  if (!remote.exists) {
+    const wrapper = { updatedAt: Date.now(), device: os.hostname(), data: localState };
+    const put = await ghPutRemoteState(token, meta.login, wrapper, null);
+    if (!put.ok) return { ok: false, error: put.error || "push_failed" };
+    writeGhMeta({ ...meta, lastSha: put.sha, lastUpdatedAt: wrapper.updatedAt });
+    return { ok: true, pushed: true, lastSyncedAt: wrapper.updatedAt };
+  }
+
+  const remoteUpdatedAt = remote.wrapper ? remote.wrapper.updatedAt : 0;
+  const lastKnownUpdatedAt = meta.lastUpdatedAt || 0;
+
+  if (remoteUpdatedAt > lastKnownUpdatedAt) {
+    // Another device pushed something we haven't seen yet — adopt it.
+    writeGhMeta({ ...meta, lastSha: remote.sha, lastUpdatedAt: remoteUpdatedAt });
+    return { ok: true, pulled: true, data: remote.wrapper.data, lastSyncedAt: remoteUpdatedAt };
+  }
+
+  const wrapper = { updatedAt: Date.now(), device: os.hostname(), data: localState };
+  const put = await ghPutRemoteState(token, meta.login, wrapper, remote.sha);
+  if (put.conflict) {
+    // Someone pushed between our read and our write — take theirs rather than overwrite it.
+    const fresh = await ghGetRemoteState(token, meta.login);
+    if (fresh.exists && fresh.wrapper) {
+      writeGhMeta({ ...meta, lastSha: fresh.sha, lastUpdatedAt: fresh.wrapper.updatedAt });
+      return { ok: true, pulled: true, data: fresh.wrapper.data, lastSyncedAt: fresh.wrapper.updatedAt };
+    }
+    return { ok: false, error: "conflict" };
+  }
+  if (!put.ok) return { ok: false, error: put.error || "push_failed" };
+  writeGhMeta({ ...meta, lastSha: put.sha, lastUpdatedAt: wrapper.updatedAt });
+  return { ok: true, pushed: true, lastSyncedAt: wrapper.updatedAt };
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -322,6 +521,49 @@ ipcMain.handle("lock:status", async (event, lockName) => {
   const data = ensureLockFile(lockName, defaultPassword);
   const now = Date.now();
   return { lockedUntil: data.lockedUntil && data.lockedUntil > now ? data.lockedUntil : 0 };
+});
+
+// ---------- IPC: GitHub cloud sync ----------
+ipcMain.handle("gh:startDeviceFlow", async () => {
+  try {
+    const data = await ghStartDeviceFlow();
+    return { ok: true, ...data };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// This call deliberately runs for as long as it takes the person to approve on
+// github.com (up to the device code's expiry, ~15 min) — IPC invoke has no timeout.
+ipcMain.handle("gh:pollForToken", async (event, { device_code, interval, expires_in }) => {
+  const result = await ghPollForToken(device_code, interval, expires_in);
+  if (!result.ok) return result;
+  try {
+    const user = await ghGetUser(result.token);
+    const repo = await ghEnsureSyncRepo(result.token, user.login);
+    saveGithubToken(result.token);
+    writeGhMeta({ login: user.login, repo: repo.name, lastSha: null, lastUpdatedAt: 0 });
+    return { ok: true, login: user.login, repo: repo.name };
+  } catch (e) {
+    return { ok: false, reason: String(e.message || e) };
+  }
+});
+
+ipcMain.handle("gh:status", async () => {
+  const token = loadGithubToken();
+  const meta = readGhMeta();
+  if (!token || !meta) return { connected: false };
+  return { connected: true, login: meta.login, repo: meta.repo, lastSyncedAt: meta.lastUpdatedAt || null };
+});
+
+ipcMain.handle("gh:disconnect", async () => {
+  clearGithubSession();
+  return { ok: true };
+});
+
+ipcMain.handle("gh:syncNow", async (event, localStateJson) => {
+  try { return await performSync(localStateJson); }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
 app.whenReady().then(() => {

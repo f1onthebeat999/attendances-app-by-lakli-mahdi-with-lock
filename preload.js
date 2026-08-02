@@ -30,5 +30,14 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   onUpdateNotAvailable: (callback) => ipcRenderer.on("update:notAvailable", (event, data) => callback(data)),
   onUpdateError: (callback) => ipcRenderer.on("update:error", (event, data) => callback(data)),
   installUpdateNow: () => ipcRenderer.invoke("update:installNow"),
+  checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow"),
+
+  // GitHub cloud sync — sign in with a GitHub account, get a private auto-created
+  // repo, and sync app data across any PC signed in to the same account.
+  ghStartDeviceFlow: () => ipcRenderer.invoke("gh:startDeviceFlow"),
+  ghPollForToken: (deviceInfo) => ipcRenderer.invoke("gh:pollForToken", deviceInfo),
+  ghStatus: () => ipcRenderer.invoke("gh:status"),
+  ghDisconnect: () => ipcRenderer.invoke("gh:disconnect"),
+  ghSyncNow: (stateJson) => ipcRenderer.invoke("gh:syncNow", stateJson),
   checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow")
 });

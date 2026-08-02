@@ -284,8 +284,8 @@
   #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   /* ---------- confirm modal ---------- */
-  #confirmOverlay, #validateGateOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
-  #confirmOverlay.show, #validateGateOverlay.show{ display:flex; }
+  #confirmOverlay, #validateGateOverlay, #ghDeviceOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  #confirmOverlay.show, #validateGateOverlay.show, #ghDeviceOverlay.show{ display:flex; }
   .confirm-box{ background:var(--bg-raised); border:1px solid var(--line); border-radius:14px; padding:24px; max-width:380px; width:100%; }
   .confirm-box p{ font-size:14.5px; color:var(--ink); margin:0 0 20px; }
   .confirm-actions{ display:flex; gap:10px; justify-content:flex-end; }
@@ -617,6 +617,23 @@
         </div>
         <p id="updateCheckStatus" style="font-size:13px;color:var(--ink-dim);margin:10px 0 0"></p>
       </div>
+      <div class="settings-card" id="cloudSyncCard" hidden>
+        <h3>Cloud sync (GitHub)</h3>
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px" id="cloudSyncDesc">
+          Sign in with GitHub to automatically back up and sync your data to a private repo — only visible to you — and pick it up on any other PC signed in to the same account.
+        </p>
+        <div id="cloudSyncSignedOut">
+          <button class="btn teal" id="btnConnectGithub">Connect GitHub account</button>
+        </div>
+        <div id="cloudSyncSignedIn" hidden>
+          <p style="font-size:13px;margin:0 0 6px">Connected as <strong id="cloudSyncLogin"></strong></p>
+          <p style="font-size:12px;color:var(--ink-dim);margin:0 0 14px" id="cloudSyncLastSynced"></p>
+          <div class="field-row">
+            <button class="btn" id="btnCloudSyncNow">Sync now</button>
+            <button class="btn ghost" id="btnCloudDisconnect">Disconnect</button>
+          </div>
+        </div>
+      </div>
       <div class="settings-card">
         <h3>Danger zone</h3>
         <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px">This permanently deletes every class, group, student and lesson.</p>
@@ -649,6 +666,21 @@
       <button class="btn teal" id="gateExportBtn">Validate, save &amp; export now</button>
       <button class="btn danger" id="gateDiscardBtn">Cancel &amp; discard changes</button>
       <button class="btn ghost" id="gateStayBtn">Go back, keep editing</button>
+    </div>
+  </div>
+</div>
+
+<div id="ghDeviceOverlay">
+  <div class="confirm-box wide">
+    <p class="confirm-title">Connect your GitHub account</p>
+    <p style="font-size:13px;color:var(--ink-dim);margin:0 0 16px">
+      Go to <a href="https://github.com/login/device" target="_blank" id="ghVerificationLink" style="color:var(--teal)">github.com/login/device</a>
+      and enter this code:
+    </p>
+    <p style="font-family:var(--display);font-size:28px;letter-spacing:2px;text-align:center;margin:0 0 16px" id="ghUserCode">— — — —</p>
+    <p style="font-size:13px;color:var(--ink-dim);text-align:center;margin:0 0 16px" id="ghDeviceStatus">Waiting for you to approve on GitHub…</p>
+    <div class="confirm-actions">
+      <button class="btn ghost" id="ghDeviceCancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -687,11 +719,15 @@ function esc(str){ return String(str==null?"":str).replace(/[&<>"']/g, c => ({"&
 function fmtMoney(n){ return state.settings.currency + (Math.round(n*100)/100).toFixed(2); }
 
 let saveTimer = null;
+let cloudSyncTimer = null;
+let ghConnected = false;
+let suppressNextCloudSync = false;
 function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     storageSet(KEY, state);
     saveNativeBackup(); // also mirror to the hidden AppData backups folder, debounced together
+    scheduleCloudSync();
   }, 250);
 }
 
@@ -818,6 +854,128 @@ if(hasNativeFiles()){
     // If res.ok, the checking-for-update/update-available/update-not-available/error
     // events above will update the status text and re-enable the button.
   });
+}
+
+/* ============ GITHUB CLOUD SYNC (desktop app only) ============ */
+// Sign in with GitHub (device code flow — no password ever touches this app),
+// which gets you an auto-created private repo storing one state.json. Every save
+// debounces a sync; every launch pulls first in case another PC pushed something
+// newer. Conflict handling lives in main.js (GitHub's file SHA is the guard rail).
+function scheduleCloudSync(){
+  if(!hasNativeFiles() || !ghConnected) return;
+  if(suppressNextCloudSync){ suppressNextCloudSync = false; return; }
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(()=>{ cloudSyncNow(); }, 4000); // debounce edits, don't sync every keystroke
+}
+
+function fmtRelativeTime(ts){
+  if(!ts) return "Never synced yet";
+  const diffMs = Date.now() - ts;
+  const mins = Math.round(diffMs/60000);
+  if(mins < 1) return "Synced just now";
+  if(mins < 60) return `Last synced ${mins} min ago`;
+  const hrs = Math.round(mins/60);
+  if(hrs < 24) return `Last synced ${hrs}h ago`;
+  return `Last synced ${new Date(ts).toLocaleString()}`;
+}
+
+async function cloudSyncNow(){
+  if(!hasNativeFiles() || !ghConnected) return;
+  try{
+    const res = await window.nativeFiles.ghSyncNow(JSON.stringify(state));
+    if(res && res.ok){
+      if(res.pulled && res.data){
+        // Another PC pushed newer data — adopt it locally without re-triggering
+        // an immediate re-push of the exact same thing we just received.
+        suppressNextCloudSync = true;
+        state = Object.assign({classes:[],lessons:[],importedLessons:[],settings:state.settings}, res.data);
+        storageSet(KEY, state);
+        renderAll();
+      }
+      const lastSyncedEl = document.getElementById("cloudSyncLastSynced");
+      if(lastSyncedEl) lastSyncedEl.textContent = fmtRelativeTime(res.lastSyncedAt);
+    }
+  }catch(e){ /* transient sync errors are silent — next debounce/interval retries */ }
+}
+
+if(hasNativeFiles()){
+  const cloudSyncCard = document.getElementById("cloudSyncCard");
+  const signedOutEl = document.getElementById("cloudSyncSignedOut");
+  const signedInEl = document.getElementById("cloudSyncSignedIn");
+  const loginEl = document.getElementById("cloudSyncLogin");
+  const lastSyncedEl = document.getElementById("cloudSyncLastSynced");
+  const deviceOverlay = document.getElementById("ghDeviceOverlay");
+  const deviceStatusEl = document.getElementById("ghDeviceStatus");
+  const userCodeEl = document.getElementById("ghUserCode");
+  const verificationLinkEl = document.getElementById("ghVerificationLink");
+
+  cloudSyncCard.hidden = false;
+
+  async function refreshCloudSyncUI(){
+    const status = await window.nativeFiles.ghStatus();
+    ghConnected = !!(status && status.connected);
+    signedOutEl.hidden = ghConnected;
+    signedInEl.hidden = !ghConnected;
+    if(ghConnected){
+      loginEl.textContent = "@" + status.login;
+      lastSyncedEl.textContent = fmtRelativeTime(status.lastSyncedAt);
+    }
+  }
+
+  document.getElementById("btnConnectGithub").addEventListener("click", async ()=>{
+    const start = await window.nativeFiles.ghStartDeviceFlow();
+    if(!start || !start.ok){
+      alert("Couldn't start GitHub sign-in: " + (start && start.error ? start.error : "unknown error"));
+      return;
+    }
+    userCodeEl.textContent = start.user_code;
+    verificationLinkEl.href = start.verification_uri || "https://github.com/login/device";
+    deviceStatusEl.textContent = "Waiting for you to approve on GitHub…";
+    deviceOverlay.classList.add("show");
+
+    const result = await window.nativeFiles.ghPollForToken({
+      device_code: start.device_code,
+      interval: start.interval,
+      expires_in: start.expires_in
+    });
+
+    if(result && result.ok){
+      deviceOverlay.classList.remove("show");
+      await refreshCloudSyncUI();
+      cloudSyncNow(); // pull/push immediately on first connect
+    } else {
+      const reason = result && result.reason;
+      deviceStatusEl.textContent = reason === "denied" ? "Sign-in was declined."
+        : reason === "expired" ? "That code expired — try again."
+        : "Something went wrong: " + (reason || "unknown error");
+    }
+  });
+
+  document.getElementById("ghDeviceCancel").addEventListener("click", ()=>{
+    deviceOverlay.classList.remove("show");
+    // Note: this only closes the dialog. If the code was already approved on GitHub's
+    // side a moment earlier, sign-in still completes; there's no way to "un-approve" a
+    // device code from here, which is expected GitHub Device Flow behavior.
+  });
+
+  document.getElementById("btnCloudSyncNow").addEventListener("click", async ()=>{
+    lastSyncedEl.textContent = "Syncing…";
+    await cloudSyncNow();
+  });
+
+  document.getElementById("btnCloudDisconnect").addEventListener("click", async ()=>{
+    if(!confirm("Disconnect this GitHub account? Your data stays in your private repo and locally on this PC — nothing is deleted.")) return;
+    await window.nativeFiles.ghDisconnect();
+    ghConnected = false;
+    await refreshCloudSyncUI();
+  });
+
+  refreshCloudSyncUI().then(()=>{
+    if(ghConnected) cloudSyncNow(); // pull any changes from another PC before this session starts editing
+  });
+
+  // Safety-net periodic sync — same 5-minute cadence as the native backup interval below.
+  setInterval(()=>{ if(ghConnected) cloudSyncNow(); }, 5 * 60 * 1000);
 }
 
 /* ============ SALARY PASSWORD LOCK (desktop app only) ============ */
