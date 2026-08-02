@@ -54,7 +54,9 @@ function writeBackup(jsonString) {
 
   // Fire-and-forget — mirrors this backup into the user's private cloud repo if
   // they're signed in, without making the local backup wait on network round-trips.
-  cloudPushBackup(filename, jsonString);
+  // Queued so it can't race a concurrent push (e.g. from an attendance TXT export
+  // saved moments earlier/later) and lose a commit-ref conflict.
+  queueCloudOp(() => cloudPushBackup(filename, jsonString));
 
   return file;
 }
@@ -66,8 +68,9 @@ function writeAttendanceTxt(filename, content) {
   const file = path.join(dir, safeName);
   fs.writeFileSync(file, content, "utf-8");
 
-  // Fire-and-forget — mirrors this export into the user's private cloud repo if signed in.
-  cloudPushAttendanceTxt(safeName, content);
+  // Fire-and-forget — mirrors this export into the user's private cloud repo if signed
+  // in. Queued so validating several groups back-to-back can't race and drop pushes.
+  queueCloudOp(() => cloudPushAttendanceTxt(safeName, content));
 
   return file;
 }
@@ -326,6 +329,18 @@ function getGhSession() {
   const meta = readGhMeta();
   if (!token || !meta) return null;
   return { token, meta };
+}
+
+// GitHub's Contents API commits every write as a full git commit. Fire off several
+// writes to the same repo at once (e.g. validating 4 groups back-to-back) and some
+// will lose a race to update the branch ref and fail outright. This queue forces
+// every cloud-repo write — backups, TXT exports, and syncs alike — to run one at a
+// time, so nothing gets silently dropped.
+let cloudQueueTail = Promise.resolve();
+function queueCloudOp(taskFn) {
+  const result = cloudQueueTail.then(taskFn, taskFn);
+  cloudQueueTail = result.catch(() => {}); // one failure must not block ops queued after it
+  return result;
 }
 
 async function ghListFolder(token, owner, folder) {
@@ -675,7 +690,7 @@ ipcMain.handle("gh:disconnect", async () => {
 });
 
 ipcMain.handle("gh:syncNow", async (event, localStateJson) => {
-  try { return await performSync(localStateJson); }
+  try { return await queueCloudOp(() => performSync(localStateJson)); }
   catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
@@ -715,6 +730,39 @@ ipcMain.handle("gh:fetchCloudFile", async (event, filePath) => {
   try {
     const content = await ghFetchFileContent(session.token, session.meta.login, filePath);
     return { ok: true, content };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+// Catches up the cloud repo with any local backups/exports that never made it up —
+// e.g. from a past silent failure. Only pushes what's missing by filename; doesn't
+// try to detect stale content in files that already exist on both sides.
+ipcMain.handle("gh:reconcileLocalFiles", async () => {
+  const session = getGhSession();
+  if (!session) return { ok: false, error: "not_connected" };
+  try {
+    let pushedBackups = 0, pushedTxt = 0;
+
+    const localBackupFiles = fs.readdirSync(backupsDir()).filter((f) => f.startsWith("backup-") && f.endsWith(".json"));
+    const cloudBackupNames = (await ghListFolder(session.token, session.meta.login, "backups")).map((f) => f.name);
+    for (const name of localBackupFiles) {
+      if (cloudBackupNames.includes(name)) continue;
+      const content = fs.readFileSync(path.join(backupsDir(), name), "utf-8");
+      await queueCloudOp(() => ghPutFile(session.token, session.meta.login, `backups/${name}`, Buffer.from(content, "utf-8"), `Backup ${name} (reconciled)`, null));
+      pushedBackups++;
+    }
+
+    const localTxtFiles = fs.readdirSync(attendanceTxtDir()).filter((f) => f.endsWith(".txt"));
+    const cloudTxtNames = (await ghListFolder(session.token, session.meta.login, "attendance-exports")).map((f) => f.name);
+    for (const name of localTxtFiles) {
+      if (cloudTxtNames.includes(name)) continue;
+      const content = fs.readFileSync(path.join(attendanceTxtDir(), name), "utf-8");
+      await queueCloudOp(() => ghPutFile(session.token, session.meta.login, `attendance-exports/${name}`, Buffer.from(content, "utf-8"), `Attendance export ${name} (reconciled)`, null));
+      pushedTxt++;
+    }
+
+    return { ok: true, pushedBackups, pushedTxt };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }

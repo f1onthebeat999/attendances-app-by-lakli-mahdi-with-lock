@@ -663,8 +663,10 @@
           <p style="font-size:12px;color:var(--ink-dim);margin:0 0 14px" id="cloudSyncLastSynced"></p>
           <div class="field-row">
             <button class="btn" id="btnCloudSyncNow">Sync now</button>
+            <button class="btn ghost" id="btnCloudReconcile">Catch up missing backups/exports…</button>
             <button class="btn ghost" id="btnCloudDisconnect">Disconnect</button>
           </div>
+          <p id="cloudReconcileStatus" style="font-size:12px;color:var(--ink-dim);margin:8px 0 0"></p>
         </div>
       </div>
       <div class="settings-card">
@@ -1006,6 +1008,23 @@ if(hasNativeFiles()){
   document.getElementById("btnCloudSyncNow").addEventListener("click", async ()=>{
     lastSyncedEl.textContent = "Syncing…";
     await cloudSyncNow();
+  });
+
+  document.getElementById("btnCloudReconcile").addEventListener("click", async ()=>{
+    const btn = document.getElementById("btnCloudReconcile");
+    const statusEl = document.getElementById("cloudReconcileStatus");
+    btn.disabled = true;
+    statusEl.textContent = "Checking for anything missing from the cloud…";
+    const res = await window.nativeFiles.reconcileCloudFiles();
+    btn.disabled = false;
+    if(!res || !res.ok){
+      statusEl.textContent = "Couldn't check: " + (res && res.error ? res.error : "unknown error");
+      return;
+    }
+    const total = res.pushedBackups + res.pushedTxt;
+    statusEl.textContent = total === 0
+      ? "Everything's already caught up."
+      : `Pushed ${res.pushedBackups} backup(s) and ${res.pushedTxt} attendance export(s) that were missing.`;
   });
 
   document.getElementById("btnCloudDisconnect").addEventListener("click", async ()=>{

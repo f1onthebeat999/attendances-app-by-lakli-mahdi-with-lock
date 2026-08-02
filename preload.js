@@ -44,5 +44,6 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   listCloudBackups: () => ipcRenderer.invoke("gh:listCloudBackups"),
   listCloudAttendanceTxt: () => ipcRenderer.invoke("gh:listCloudAttendanceTxt"),
   fetchCloudFile: (filePath) => ipcRenderer.invoke("gh:fetchCloudFile", filePath),
+  reconcileCloudFiles: () => ipcRenderer.invoke("gh:reconcileLocalFiles"),
   checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow")
 });
