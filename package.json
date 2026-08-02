@@ -1,6 +1,6 @@
 {
   "name": "class-attendance-manager",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Class & Attendance Manager — desktop app",
   "main": "main.js",
   "author": "Your Name",
@@ -26,7 +26,8 @@
     "publish": {
       "provider": "github",
       "owner": "f1onthebeat999",
-      "repo": "attendances-app-by-lakli-mahdi-with-lock"
+      "repo": "attendances-app-by-lakli-mahdi-with-lock",
+      "releaseType": "release"
     },
     "files": [
       "main.js",
