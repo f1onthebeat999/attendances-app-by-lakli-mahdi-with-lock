@@ -284,8 +284,8 @@
   #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   /* ---------- confirm modal ---------- */
-  #confirmOverlay, #validateGateOverlay, #ghDeviceOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
-  #confirmOverlay.show, #validateGateOverlay.show, #ghDeviceOverlay.show{ display:flex; }
+  #confirmOverlay, #validateGateOverlay, #ghDeviceOverlay, #cloudRestoreOverlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  #confirmOverlay.show, #validateGateOverlay.show, #ghDeviceOverlay.show, #cloudRestoreOverlay.show{ display:flex; }
   .confirm-box{ background:var(--bg-raised); border:1px solid var(--line); border-radius:14px; padding:24px; max-width:380px; width:100%; }
   .confirm-box p{ font-size:14.5px; color:var(--ink); margin:0 0 20px; }
   .confirm-actions{ display:flex; gap:10px; justify-content:flex-end; }
@@ -505,6 +505,7 @@
       <p style="font-size:13px;color:var(--ink-dim);margin:0 0 12px">If you've cleared a period or you're on a new device, bring back your old attendance records here — every date they cover becomes searchable below, right back to your very first export. You'll only need this if the app's data was ever wiped or moved to a new PC; day-to-day, everything you validate is already saved and searchable automatically.</p>
       <div class="field-row">
         <button class="btn teal" id="btnImportAttendanceNative" hidden>Pick from auto-saved exports…</button>
+        <button class="btn" id="btnRestoreCloudAttendance" hidden>Restore from cloud…</button>
       </div>
       <p id="importedStats" style="font-size:12px;color:var(--ink-dimmer);margin:10px 0 0">No imported records yet.</p>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
@@ -606,7 +607,10 @@
         </div>
         <div id="nativeBackupRow" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)" hidden>
           <p style="font-size:13px;color:var(--ink-dim);margin:0 0 10px">This app also auto-backs itself up in the background to a hidden folder on this PC — every time something changes, and every few minutes regardless. The last 5 are kept.</p>
-          <button class="btn teal" id="btnRestoreNativeBackup">Restore from auto-backup…</button>
+          <div class="field-row">
+            <button class="btn teal" id="btnRestoreNativeBackup">Restore from auto-backup…</button>
+            <button class="btn" id="btnRestoreCloudBackup" hidden>Restore from cloud backup…</button>
+          </div>
         </div>
       </div>
       <div class="settings-card" id="updateCheckCard" hidden>
@@ -681,6 +685,16 @@
     <p style="font-size:13px;color:var(--ink-dim);text-align:center;margin:0 0 16px" id="ghDeviceStatus">Waiting for you to approve on GitHub…</p>
     <div class="confirm-actions">
       <button class="btn ghost" id="ghDeviceCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="cloudRestoreOverlay">
+  <div class="confirm-box wide">
+    <p class="confirm-title" id="cloudRestoreTitle">Restore from cloud</p>
+    <div id="cloudRestoreList" style="max-height:320px;overflow-y:auto;margin-bottom:16px"></div>
+    <div class="confirm-actions">
+      <button class="btn ghost" id="cloudRestoreClose">Close</button>
     </div>
   </div>
 </div>
@@ -916,6 +930,8 @@ if(hasNativeFiles()){
     ghConnected = !!(status && status.connected);
     signedOutEl.hidden = ghConnected;
     signedInEl.hidden = !ghConnected;
+    document.getElementById("btnRestoreCloudBackup").hidden = !ghConnected;
+    document.getElementById("btnRestoreCloudAttendance").hidden = !ghConnected;
     if(ghConnected){
       loginEl.textContent = "@" + status.login;
       lastSyncedEl.textContent = fmtRelativeTime(status.lastSyncedAt);
@@ -976,6 +992,98 @@ if(hasNativeFiles()){
 
   // Safety-net periodic sync — same 5-minute cadence as the native backup interval below.
   setInterval(()=>{ if(ghConnected) cloudSyncNow(); }, 5 * 60 * 1000);
+
+  // ---- Restore a specific historical backup or attendance export from the cloud ----
+  // This is what makes a brand-new PC useful: sign in, then pull down anything from
+  // this list, not just whatever the live auto-sync last pushed.
+  function openCloudRestorePicker(kind){
+    if(!ghConnected){ showToast("Connect your GitHub account first (Settings tab)"); return; }
+    const overlay = document.getElementById("cloudRestoreOverlay");
+    const listEl = document.getElementById("cloudRestoreList");
+    const titleEl = document.getElementById("cloudRestoreTitle");
+    titleEl.textContent = kind === "backup" ? "Restore a backup from the cloud" : "Restore an attendance export from the cloud";
+    listEl.innerHTML = '<p style="font-size:13px;color:var(--ink-dim)">Loading…</p>';
+    overlay.classList.add("show");
+
+    (async ()=>{
+      const res = kind === "backup" ? await window.nativeFiles.listCloudBackups() : await window.nativeFiles.listCloudAttendanceTxt();
+      if(!res || !res.ok){
+        listEl.innerHTML = '<p style="font-size:13px;color:var(--orange)">Couldn\'t load cloud files' + (res && res.error ? ": " + esc(res.error) : "") + '.</p>';
+        return;
+      }
+      if(!res.files.length){
+        listEl.innerHTML = '<p style="font-size:13px;color:var(--ink-dim)">No files up there yet.</p>';
+        return;
+      }
+      listEl.innerHTML = res.files.map(f => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+          <span style="font-size:13px;flex:1;word-break:break-all">${esc(f.name)}</span>
+          <button class="btn" data-restore-path="${esc(f.path)}" data-restore-kind="${kind}">Restore</button>
+        </div>`).join("");
+    })();
+  }
+
+  document.getElementById("btnRestoreCloudBackup").addEventListener("click", ()=>openCloudRestorePicker("backup"));
+  document.getElementById("btnRestoreCloudAttendance").addEventListener("click", ()=>openCloudRestorePicker("attendance"));
+  document.getElementById("cloudRestoreClose").addEventListener("click", ()=>{
+    document.getElementById("cloudRestoreOverlay").classList.remove("show");
+  });
+  document.getElementById("cloudRestoreList").addEventListener("click", async (e)=>{
+    const btn = e.target.closest("[data-restore-path]");
+    if(!btn) return;
+    const filePath = btn.getAttribute("data-restore-path");
+    const kind = btn.getAttribute("data-restore-kind");
+    btn.disabled = true;
+    btn.textContent = "Restoring…";
+
+    const res = await window.nativeFiles.fetchCloudFile(filePath);
+    if(!res || !res.ok){
+      showToast("Couldn't fetch that file");
+      btn.disabled = false; btn.textContent = "Restore";
+      return;
+    }
+
+    if(kind === "backup"){
+      try{
+        const parsed = JSON.parse(res.content);
+        if(!parsed || !Array.isArray(parsed.classes)){
+          showToast("That file doesn't look like a valid backup");
+          btn.disabled = false; btn.textContent = "Restore";
+          return;
+        }
+        suppressNextCloudSync = true; // this data came FROM the cloud — don't immediately re-push it
+        state = parsed;
+        storageSet(KEY, state);
+        renderAll();
+        showToast("Backup restored from cloud");
+      }catch(e){
+        showToast("Couldn't restore that backup");
+        btn.disabled = false; btn.textContent = "Restore";
+        return;
+      }
+    } else {
+      const parsed = parseAttendanceTxt(res.content);
+      if(!parsed){
+        showToast("That file doesn't look like an attendance export");
+        btn.disabled = false; btn.textContent = "Restore";
+        return;
+      }
+      state.importedLessons = state.importedLessons || [];
+      const key = parsed.className+"|"+parsed.groupName+"|"+parsed.date;
+      const existingKeys = new Set(state.importedLessons.map(l => l.className+"|"+l.groupName+"|"+l.date));
+      if(existingKeys.has(key)){
+        showToast("That attendance record is already imported");
+        btn.disabled = false; btn.textContent = "Restore";
+        return;
+      }
+      state.importedLessons.push(Object.assign({ id: uid("imp") }, parsed));
+      scheduleSave();
+      renderImportedStats();
+      if(document.getElementById("searchInput")) renderSearchResults();
+      showToast("Imported from cloud");
+    }
+    document.getElementById("cloudRestoreOverlay").classList.remove("show");
+  });
 }
 
 /* ============ SALARY PASSWORD LOCK (desktop app only) ============ */

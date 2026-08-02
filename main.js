@@ -38,7 +38,8 @@ function timestampForFilename() {
 // Writes a new timestamped backup file, then deletes older ones beyond MAX_BACKUPS.
 function writeBackup(jsonString) {
   const dir = backupsDir();
-  const file = path.join(dir, `backup-${timestampForFilename()}.json`);
+  const filename = `backup-${timestampForFilename()}.json`;
+  const file = path.join(dir, filename);
   fs.writeFileSync(file, jsonString, "utf-8");
 
   const files = fs.readdirSync(dir)
@@ -50,6 +51,11 @@ function writeBackup(jsonString) {
       try { fs.unlinkSync(path.join(dir, f)); } catch (e) { /* ignore */ }
     });
   }
+
+  // Fire-and-forget — mirrors this backup into the user's private cloud repo if
+  // they're signed in, without making the local backup wait on network round-trips.
+  cloudPushBackup(filename, jsonString);
+
   return file;
 }
 
@@ -59,6 +65,10 @@ function writeAttendanceTxt(filename, content) {
   const safeName = filename.replace(/[/\\?%*:|"<>]/g, "-"); // strip characters Windows won't allow in filenames
   const file = path.join(dir, safeName);
   fs.writeFileSync(file, content, "utf-8");
+
+  // Fire-and-forget — mirrors this export into the user's private cloud repo if signed in.
+  cloudPushAttendanceTxt(safeName, content);
+
   return file;
 }
 
@@ -152,7 +162,7 @@ const SALARY_LOCK_DEFAULT_PASSWORD = "1234";  // change via lock-salary.json —
 // ---------- GitHub cloud sync ----------
 // Sign-in via GitHub's Device Flow (no client secret needed — safe to ship this ID).
 // Register your own at github.com/settings/developers -> OAuth Apps -> enable "Device Flow".
-const GITHUB_CLIENT_ID = "Ov23li2zswRfn1BRNMw6";
+const GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_OAUTH_APP_CLIENT_ID";
 
 // Each signed-in user gets exactly one auto-created private repo under their own
 // account. We never touch anyone else's repos, and never see their password —
@@ -311,7 +321,86 @@ async function ghPutRemoteState(token, owner, wrapperObj, sha) {
   return { ok: true, sha: r.body.content.sha };
 }
 
-// The actual two-way sync. GitHub's file SHA doubles as our conflict check: if
+function getGhSession() {
+  const token = loadGithubToken();
+  const meta = readGhMeta();
+  if (!token || !meta) return null;
+  return { token, meta };
+}
+
+async function ghListFolder(token, owner, folder) {
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${folder}`);
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error("Couldn't list cloud files");
+  return Array.isArray(r.body) ? r.body : [];
+}
+
+async function ghPutFile(token, owner, filePath, bufferContent, message, sha) {
+  const body = { message, content: bufferContent.toString("base64") };
+  if (sha) body.sha = sha;
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${filePath}`, {
+    method: "PUT",
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error((r.body && r.body.message) || `HTTP ${r.status}`);
+  return r.body;
+}
+
+async function ghDeleteFile(token, owner, filePath, sha, message) {
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${filePath}`, {
+    method: "DELETE",
+    body: JSON.stringify({ message, sha })
+  });
+  if (!r.ok) throw new Error((r.body && r.body.message) || `HTTP ${r.status}`);
+}
+
+async function ghFetchFileContent(token, owner, filePath) {
+  const r = await ghRequest(token, `/repos/${owner}/${SYNC_REPO_NAME}/contents/${filePath}`);
+  if (!r.ok) throw new Error("That file isn't in the cloud repo");
+  return Buffer.from(r.body.content, "base64").toString("utf-8");
+}
+
+// Mirrors a local timestamped backup into backups/ in the cloud repo, then prunes
+// old ones there too so the cloud copy matches the same "last 5" rule as local.
+// Fire-and-forget from the caller's perspective — a slow/offline cloud push should
+// never delay or break the local backup that already succeeded.
+async function cloudPushBackup(filename, jsonString) {
+  const session = getGhSession();
+  if (!session) return;
+  try {
+    const filePath = `backups/${filename}`;
+    await ghPutFile(session.token, session.meta.login, filePath, Buffer.from(jsonString, "utf-8"), `Backup ${filename}`, null);
+    const files = await ghListFolder(session.token, session.meta.login, "backups");
+    const names = files.map((f) => f.name).filter((n) => n.startsWith("backup-") && n.endsWith(".json")).sort();
+    const excess = names.length - MAX_BACKUPS;
+    if (excess > 0) {
+      for (const name of names.slice(0, excess)) {
+        const f = files.find((x) => x.name === name);
+        if (f) {
+          try { await ghDeleteFile(session.token, session.meta.login, f.path, f.sha, `Prune old backup ${name}`); }
+          catch (e) { /* non-fatal — next prune pass will catch it */ }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Cloud backup mirror failed:", e.message || e);
+  }
+}
+
+// Mirrors an attendance TXT export into attendance-exports/ in the cloud repo.
+async function cloudPushAttendanceTxt(filename, content) {
+  const session = getGhSession();
+  if (!session) return;
+  try {
+    const filePath = `attendance-exports/${filename}`;
+    let sha = null;
+    const existing = await ghRequest(session.token, `/repos/${session.meta.login}/${SYNC_REPO_NAME}/contents/${filePath}`);
+    if (existing.ok) sha = existing.body.sha;
+    await ghPutFile(session.token, session.meta.login, filePath, Buffer.from(content, "utf-8"), `Attendance export ${filename}`, sha);
+  } catch (e) {
+    console.warn("Cloud attendance export mirror failed:", e.message || e);
+  }
+}
 // another PC pushed since we last looked, our push is rejected instead of quietly
 // overwriting their changes, and we pull theirs down instead.
 async function performSync(localStateJson) {
@@ -572,6 +661,47 @@ ipcMain.handle("gh:disconnect", async () => {
 ipcMain.handle("gh:syncNow", async (event, localStateJson) => {
   try { return await performSync(localStateJson); }
   catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+ipcMain.handle("gh:listCloudBackups", async () => {
+  const session = getGhSession();
+  if (!session) return { ok: false, error: "not_connected" };
+  try {
+    const files = await ghListFolder(session.token, session.meta.login, "backups");
+    const list = files
+      .filter((f) => f.name.startsWith("backup-") && f.name.endsWith(".json"))
+      .map((f) => ({ name: f.name, path: f.path }))
+      .sort((a, b) => b.name.localeCompare(a.name));
+    return { ok: true, files: list };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle("gh:listCloudAttendanceTxt", async () => {
+  const session = getGhSession();
+  if (!session) return { ok: false, error: "not_connected" };
+  try {
+    const files = await ghListFolder(session.token, session.meta.login, "attendance-exports");
+    const list = files
+      .filter((f) => f.name.endsWith(".txt"))
+      .map((f) => ({ name: f.name, path: f.path }))
+      .sort((a, b) => b.name.localeCompare(a.name));
+    return { ok: true, files: list };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle("gh:fetchCloudFile", async (event, filePath) => {
+  const session = getGhSession();
+  if (!session) return { ok: false, error: "not_connected" };
+  try {
+    const content = await ghFetchFileContent(session.token, session.meta.login, filePath);
+    return { ok: true, content };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
 });
 
 app.whenReady().then(() => {

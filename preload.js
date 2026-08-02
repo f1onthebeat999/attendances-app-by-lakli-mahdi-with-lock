@@ -39,5 +39,8 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   ghStatus: () => ipcRenderer.invoke("gh:status"),
   ghDisconnect: () => ipcRenderer.invoke("gh:disconnect"),
   ghSyncNow: (stateJson) => ipcRenderer.invoke("gh:syncNow", stateJson),
+  listCloudBackups: () => ipcRenderer.invoke("gh:listCloudBackups"),
+  listCloudAttendanceTxt: () => ipcRenderer.invoke("gh:listCloudAttendanceTxt"),
+  fetchCloudFile: (filePath) => ipcRenderer.invoke("gh:fetchCloudFile", filePath),
   checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow")
 });
