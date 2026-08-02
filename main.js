@@ -202,8 +202,16 @@ autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
 
 function setupAutoUpdater(win) {
+  autoUpdater.on("checking-for-update", () => {
+    win.webContents.send("update:checking");
+  });
+
   autoUpdater.on("update-available", (info) => {
     win.webContents.send("update:available", { version: info.version });
+  });
+
+  autoUpdater.on("update-not-available", (info) => {
+    win.webContents.send("update:notAvailable", { version: info.version });
   });
 
   autoUpdater.on("update-downloaded", (info) => {
@@ -211,9 +219,12 @@ function setupAutoUpdater(win) {
   });
 
   autoUpdater.on("error", (err) => {
-    console.warn("Auto-update check failed:", err == null ? "unknown error" : (err.stack || err).toString());
-    // Failures here (e.g. no internet, or repo not public yet) are silent to the user —
-    // the app works fully offline either way, this is purely a background convenience.
+    const message = err == null ? "unknown error" : (err.stack || err).toString();
+    console.warn("Auto-update check failed:", message);
+    // The background/periodic check stays silent to the user (e.g. no internet is normal
+    // and shouldn't nag anyone) — but we still forward it as an event so a manual
+    // "Check for updates now" click in Settings can surface it instead of hanging forever.
+    win.webContents.send("update:error", { message });
   });
 
   // Check once shortly after launch, and then every few hours while the app stays open.
@@ -227,6 +238,18 @@ function setupAutoUpdater(win) {
 ipcMain.handle("update:installNow", async () => {
   autoUpdater.quitAndInstall();
   return { ok: true };
+});
+
+// Renderer calls this from the Settings "Check for updates now" button.
+// Unlike the silent background check, this one reports back so the button
+// can show a real result instead of just spinning forever.
+ipcMain.handle("update:checkNow", async () => {
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
 });
 
 // ---------- IPC: backups ----------

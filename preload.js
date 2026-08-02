@@ -26,5 +26,9 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   // installUpdateNow(). onUpdateAvailable/onUpdateReady let index.html show a notice.
   onUpdateAvailable: (callback) => ipcRenderer.on("update:available", (event, data) => callback(data)),
   onUpdateReady: (callback) => ipcRenderer.on("update:ready", (event, data) => callback(data)),
-  installUpdateNow: () => ipcRenderer.invoke("update:installNow")
+  onUpdateChecking: (callback) => ipcRenderer.on("update:checking", () => callback()),
+  onUpdateNotAvailable: (callback) => ipcRenderer.on("update:notAvailable", (event, data) => callback(data)),
+  onUpdateError: (callback) => ipcRenderer.on("update:error", (event, data) => callback(data)),
+  installUpdateNow: () => ipcRenderer.invoke("update:installNow"),
+  checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow")
 });

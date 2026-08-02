@@ -609,6 +609,14 @@
           <button class="btn teal" id="btnRestoreNativeBackup">Restore from auto-backup…</button>
         </div>
       </div>
+      <div class="settings-card" id="updateCheckCard" hidden>
+        <h3>Updates</h3>
+        <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px">This app checks for new versions automatically in the background every few hours. Use this if you don't want to wait.</p>
+        <div class="field-row">
+          <button class="btn" id="btnCheckUpdateNow">Check for updates now</button>
+        </div>
+        <p id="updateCheckStatus" style="font-size:13px;color:var(--ink-dim);margin:10px 0 0"></p>
+      </div>
       <div class="settings-card">
         <h3>Danger zone</h3>
         <p style="font-size:13px;color:var(--ink-dim);margin:0 0 14px">This permanently deletes every class, group, student and lesson.</p>
@@ -771,6 +779,44 @@ if(hasNativeFiles()){
     document.getElementById("updateBanner").classList.remove("show");
     // Comes back next time the app restarts and finds the same (or a newer) update ready —
     // dismissing just means "not right now", not "never tell me again".
+  });
+
+  // ---- Manual "Check for updates now" (Settings tab) ----
+  const updateCheckCard = document.getElementById("updateCheckCard");
+  const updateCheckStatus = document.getElementById("updateCheckStatus");
+  const btnCheckUpdateNow = document.getElementById("btnCheckUpdateNow");
+  updateCheckCard.hidden = false;
+
+  window.nativeFiles.onUpdateChecking(()=>{
+    updateCheckStatus.textContent = "Checking for updates…";
+  });
+  window.nativeFiles.onUpdateNotAvailable((info)=>{
+    updateCheckStatus.textContent = "You're up to date.";
+    btnCheckUpdateNow.disabled = false;
+  });
+  window.nativeFiles.onUpdateAvailable((info)=>{
+    updateCheckStatus.textContent = `Downloading version ${info.version}…`;
+    btnCheckUpdateNow.disabled = false;
+  });
+  window.nativeFiles.onUpdateReady((info)=>{
+    updateCheckStatus.textContent = `Version ${info.version} is ready — see the banner above to install.`;
+    btnCheckUpdateNow.disabled = false;
+  });
+  window.nativeFiles.onUpdateError((info)=>{
+    updateCheckStatus.textContent = "Couldn't check for updates. Check your internet connection.";
+    btnCheckUpdateNow.disabled = false;
+  });
+
+  btnCheckUpdateNow.addEventListener("click", async ()=>{
+    btnCheckUpdateNow.disabled = true;
+    updateCheckStatus.textContent = "Checking for updates…";
+    const res = await window.nativeFiles.checkForUpdatesNow();
+    if(res && res.ok === false){
+      updateCheckStatus.textContent = "Couldn't check for updates. Check your internet connection.";
+      btnCheckUpdateNow.disabled = false;
+    }
+    // If res.ok, the checking-for-update/update-available/update-not-available/error
+    // events above will update the status text and re-enable the button.
   });
 }
 
