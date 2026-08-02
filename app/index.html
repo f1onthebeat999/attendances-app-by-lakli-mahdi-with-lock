@@ -1035,11 +1035,37 @@ if(hasNativeFiles()){
   });
 
   refreshCloudSyncUI().then(()=>{
-    if(ghConnected) cloudSyncNow(); // pull any changes from another PC before this session starts editing
+    if(ghConnected){
+      cloudSyncNow(); // pull any changes from another PC before this session starts editing
+      autoReconcile(); // catch up any backups/exports that never made it to the cloud last session
+    }
   });
 
   // Safety-net periodic sync — same 5-minute cadence as the native backup interval below.
   setInterval(()=>{ if(ghConnected) cloudSyncNow(); }, 5 * 60 * 1000);
+
+  // Keeps backups/attendance-exports caught up with the cloud continuously, not just
+  // at launch — catches anything a queued push still failed to land (e.g. no internet
+  // for a stretch). Silent when there's nothing missing; only surfaces when it finds
+  // something to push. reconcileBusy prevents overlapping runs if one takes >15s.
+  let reconcileBusy = false;
+  async function autoReconcile(){
+    if(!ghConnected || reconcileBusy) return;
+    reconcileBusy = true;
+    try{
+      const res = await window.nativeFiles.reconcileCloudFiles();
+      if(res && res.ok){
+        const total = res.pushedBackups + res.pushedTxt;
+        const statusEl = document.getElementById("cloudReconcileStatus");
+        if(total > 0){
+          if(statusEl) statusEl.textContent = `Auto-caught up ${res.pushedBackups} backup(s) and ${res.pushedTxt} export(s) just now.`;
+          showToast(`Synced ${total} file(s) to the cloud`);
+        }
+      }
+    }catch(e){ /* silent — next 15s cycle retries */ }
+    reconcileBusy = false;
+  }
+  setInterval(autoReconcile, 15 * 1000);
 
   // ---- Restore a specific historical backup or attendance export from the cloud ----
   // This is what makes a brand-new PC useful: sign in, then pull down anything from
