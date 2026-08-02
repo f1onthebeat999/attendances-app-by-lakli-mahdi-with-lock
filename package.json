@@ -16,11 +16,18 @@
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "build": {
     "appId": "com.yourname.attendancemanager",
     "productName": "Class & Attendance Manager",
     "asar": true,
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "f1onthebeat999",
+      "repo": "attendances-app-by-lakli-mahdi-with-lock"
+    },
     "files": [
       "main.js",
       "preload.js",
@@ -41,8 +48,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Class & Attendance Manager",
-      "differentialPackage": false
+      "shortcutName": "Class & Attendance Manager"
     },
     "mac": {
       "target": ["dmg"],

@@ -2,10 +2,19 @@ name: Build Windows installer
 
 # Builds Setup.exe automatically in GitHub's cloud — no Windows PC needed.
 # Runs on every push to main, and can also be triggered manually from the Actions tab.
+#
+# Also PUBLISHES a GitHub Release with the installer attached — this is what lets
+# already-installed copies of the app auto-detect and offer the new version.
+# Every push to main creates/updates a release, so bump the "version" in package.json
+# before pushing an update you want people to actually see offered to them.
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
+
+# Required so this workflow is allowed to create/update a GitHub Release.
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -20,8 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows installer
-        run: npm run dist:win
+      - name: Build Windows installer and publish release
+        run: npm run dist:win -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

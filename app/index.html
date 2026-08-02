@@ -368,6 +368,15 @@
   .locked-bar .msg .dim{ display:block; font-weight:500; color:var(--ink-dim); font-size:12px; margin-top:2px; }
   .locked-bar .actions{ display:flex; gap:8px; flex-wrap:wrap; }
 
+  /* ---------- update available banner ---------- */
+  #updateBanner{
+    background:var(--orange-dim); border-bottom:1px solid #ff6a1f66;
+    display:none; align-items:center; justify-content:center; gap:14px;
+    padding:10px 16px; font-size:13px; font-weight:600; color:var(--ink); flex-wrap:wrap; text-align:center;
+  }
+  #updateBanner.show{ display:flex; }
+  #updateBanner .dot{ width:7px; height:7px; border-radius:50%; background:var(--orange); flex:none; }
+
   [hidden]{ display:none !important; }
 </style>
 </head>
@@ -404,6 +413,12 @@
 </div>
 
 <div class="noise"></div>
+
+<div id="updateBanner">
+  <span><span class="dot"></span> <span id="updateBannerText">A new version is ready.</span></span>
+  <button class="btn small primary" id="btnInstallUpdate">Install &amp; restart</button>
+  <button class="btn small ghost" id="btnDismissUpdate">Later</button>
+</div>
 
 <div class="rail">
   <div class="rail-inner">
@@ -739,6 +754,25 @@ async function initAppLock(){
   input.addEventListener("keydown", e=>{ if(e.key === "Enter") attempt(); });
 }
 initAppLock();
+
+/* ============ AUTO-UPDATE NOTICE (desktop app only) ============ */
+// main.js checks GitHub Releases in the background and downloads silently; this only
+// ever surfaces a banner once a new version is fully downloaded and ready to install.
+// Nothing installs until the person clicks the button — never automatic.
+if(hasNativeFiles()){
+  window.nativeFiles.onUpdateReady((info)=>{
+    document.getElementById("updateBannerText").textContent = `Version ${info.version} is ready to install.`;
+    document.getElementById("updateBanner").classList.add("show");
+  });
+  document.getElementById("btnInstallUpdate").addEventListener("click", ()=>{
+    window.nativeFiles.installUpdateNow();
+  });
+  document.getElementById("btnDismissUpdate").addEventListener("click", ()=>{
+    document.getElementById("updateBanner").classList.remove("show");
+    // Comes back next time the app restarts and finds the same (or a newer) update ready —
+    // dismissing just means "not right now", not "never tell me again".
+  });
+}
 
 /* ============ SALARY PASSWORD LOCK (desktop app only) ============ */
 // Asked every time the Salary tab is opened — independent from the app-wide lock above,

@@ -165,3 +165,59 @@ included) can fully guarantee that, since the app itself has to be
 able to check the password locally. For protecting personal data from
 a teacher or casual snooping on a shared PC, this is a strong, honest
 fit.
+
+## Auto-update (one-time setup required)
+
+Once set up, installed copies of this app check for new versions in
+the background and show a small "new version ready" banner — you
+click **Install & restart** and it's done. No more manually visiting
+GitHub Actions or reinstalling by hand.
+
+**This only works once you've done a one-time setup step:** open
+`package.json` and replace the two placeholders in the `"publish"`
+section with your actual GitHub username and repo name:
+
+```json
+"publish": {
+  "provider": "github",
+  "owner": "YOUR_GITHUB_USERNAME",
+  "repo": "YOUR_REPO_NAME"
+}
+```
+
+For example, if your repo's URL is `github.com/flonthebeat999/attendance-app`,
+then `owner` is `flonthebeat999` and `repo` is `attendance-app`.
+
+### How shipping an update actually works from here on
+
+Every push to `main` still triggers the same build as before — but now
+it also **publishes a GitHub Release** with the installer attached
+(visible under your repo's "Releases" section on the right sidebar).
+Installed copies of the app check that Releases page automatically.
+
+**Before pushing a change you want people to see offered as an update,
+bump the version number** in `package.json`:
+
+```json
+"version": "1.0.1",
+```
+
+The app compares its own version against the latest Release's version —
+if you don't bump it, it won't detect anything new, since as far as it
+can tell nothing changed.
+
+So the day-to-day loop becomes:
+1. Edit the code as usual (e.g. `app/index.html`)
+2. Bump `"version"` in `package.json` (e.g. `1.0.0` → `1.0.1`)
+3. Commit and push
+4. Actions builds it and publishes the Release automatically
+5. Next time the installed app checks (on launch, and every few hours
+   while open), it finds the new Release, downloads it quietly in the
+   background, and shows the "Install & restart" banner once it's
+   ready — you decide when to click it, nothing installs on its own.
+
+### What still requires a manual reinstall
+
+The very **first** install always has to be the manual `Setup.exe` —
+auto-update only applies to versions *after* that first one, since it
+needs the app already running to check for updates in the first place.

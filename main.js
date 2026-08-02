@@ -8,6 +8,7 @@ const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require("electron")
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { autoUpdater } = require("electron-updater");
 
 // ---------- hidden folder locations ----------
 // app.getPath("userData") is the standard, OS-correct per-user app data folder —
@@ -188,8 +189,45 @@ function createWindow() {
   ]);
   Menu.setApplicationMenu(menu);
 
+  setupAutoUpdater(win);
+
   return win;
 }
+
+// ---------- auto-update (checks GitHub Releases for this repo) ----------
+// "Ask first" behavior: we check for and DOWNLOAD an update in the background so it's
+// ready instantly, but we never install it without the person clicking a button first.
+// autoUpdater.autoInstallOnAppQuit stays false so nothing installs itself unexpectedly.
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
+
+function setupAutoUpdater(win) {
+  autoUpdater.on("update-available", (info) => {
+    win.webContents.send("update:available", { version: info.version });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    win.webContents.send("update:ready", { version: info.version });
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.warn("Auto-update check failed:", err == null ? "unknown error" : (err.stack || err).toString());
+    // Failures here (e.g. no internet, or repo not public yet) are silent to the user —
+    // the app works fully offline either way, this is purely a background convenience.
+  });
+
+  // Check once shortly after launch, and then every few hours while the app stays open.
+  // Never blocks startup — the app is fully usable immediately regardless of the result.
+  setTimeout(() => { autoUpdater.checkForUpdates().catch(() => {}); }, 4000);
+  setInterval(() => { autoUpdater.checkForUpdates().catch(() => {}); }, 4 * 60 * 60 * 1000);
+}
+
+// Renderer calls this once the person clicks "Install update" on the notice —
+// this is the ONLY thing that actually triggers install + restart.
+ipcMain.handle("update:installNow", async () => {
+  autoUpdater.quitAndInstall();
+  return { ok: true };
+});
 
 // ---------- IPC: backups ----------
 ipcMain.handle("backup:save", async (event, jsonString) => {

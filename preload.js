@@ -19,5 +19,12 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   // renderer never sees the real password or its hash, only true/false + lockout info.
   verifyAppPassword: (attempt) => ipcRenderer.invoke("lock:verifyApp", attempt),
   verifySalaryPassword: (attempt) => ipcRenderer.invoke("lock:verifySalary", attempt),
-  lockStatus: (lockName) => ipcRenderer.invoke("lock:status", lockName)
+  lockStatus: (lockName) => ipcRenderer.invoke("lock:status", lockName),
+
+  // Auto-update: main.js checks GitHub Releases in the background and downloads
+  // silently, but only ever installs when the person clicks the button that calls
+  // installUpdateNow(). onUpdateAvailable/onUpdateReady let index.html show a notice.
+  onUpdateAvailable: (callback) => ipcRenderer.on("update:available", (event, data) => callback(data)),
+  onUpdateReady: (callback) => ipcRenderer.on("update:ready", (event, data) => callback(data)),
+  installUpdateNow: () => ipcRenderer.invoke("update:installNow")
 });
