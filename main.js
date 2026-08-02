@@ -152,7 +152,7 @@ const SALARY_LOCK_DEFAULT_PASSWORD = "1234";  // change via lock-salary.json —
 // ---------- GitHub cloud sync ----------
 // Sign-in via GitHub's Device Flow (no client secret needed — safe to ship this ID).
 // Register your own at github.com/settings/developers -> OAuth Apps -> enable "Device Flow".
-const GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_OAUTH_APP_CLIENT_ID";
+const GITHUB_CLIENT_ID = "Ov23li2zswRfn1BRNMw6";
 
 // Each signed-in user gets exactly one auto-created private repo under their own
 // account. We never touch anyone else's repos, and never see their password —
@@ -218,13 +218,21 @@ async function ghRequest(token, path, options = {}) {
 
 // ---- Sign-in (Device Flow) ----
 async function ghStartDeviceFlow() {
-  const res = await fetch("https://github.com/login/device/code", {
-    method: "POST",
-    headers: { "Accept": "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, scope: "repo" })
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error_description || "Couldn't start GitHub sign-in");
+  let res, data;
+  try {
+    res = await fetch("https://github.com/login/device/code", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, scope: "repo" })
+    });
+    data = await res.json();
+  } catch (e) {
+    throw new Error("Network error reaching GitHub: " + String(e.message || e));
+  }
+  if (!res.ok || data.error) {
+    const detail = data.error_description || data.error || `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
   return data; // { device_code, user_code, verification_uri, expires_in, interval }
 }
 
