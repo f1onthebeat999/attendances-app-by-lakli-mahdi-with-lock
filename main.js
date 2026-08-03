@@ -551,6 +551,14 @@ ipcMain.handle("update:installNow", async () => {
   return { ok: true };
 });
 
+// Native page zoom for the "Interface size" control in Settings — same mechanism as
+// the View menu's Zoom In/Out, just driven by a saved preference instead of Ctrl+/-.
+ipcMain.handle("ui:setZoomFactor", async (event, factor) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.webContents.setZoomFactor(factor);
+  return { ok: true };
+});
+
 // Renderer calls this from the Settings "Check for updates now" button.
 // Unlike the silent background check, this one reports back so the button
 // can show a real result instead of just spinning forever.

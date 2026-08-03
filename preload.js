@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld("nativeFiles", {
   onUpdateError: (callback) => ipcRenderer.on("update:error", (event, data) => callback(data)),
   installUpdateNow: () => ipcRenderer.invoke("update:installNow"),
   checkForUpdatesNow: () => ipcRenderer.invoke("update:checkNow"),
+  setZoomFactor: (factor) => ipcRenderer.invoke("ui:setZoomFactor", factor),
 
   // GitHub cloud sync — sign in with a GitHub account, get a private auto-created
   // repo, and sync app data across any PC signed in to the same account.

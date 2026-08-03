@@ -16,7 +16,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;700;800&family=Archivo:wght@400;500;600;700&family=Cinzel:wght@600;700;800&family=EB+Garamond:wght@400;500;600;700&family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;800;900&family=Source+Serif+4:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: #0c0c0e;
@@ -47,6 +47,52 @@
     --ink-dim:#57544f;
     --ink-dimmer:#8a867f;
   }
+
+  /* Medieval — dark wood, aged leather, parchment ink, antique gold + forest accents */
+  body.medieval{
+    --bg:#1a140d;
+    --bg-raised:#241b12;
+    --bg-raised-2:#2e2318;
+    --line:#4a3826;
+    --line-soft:#3a2c1c;
+    --ink:#f0e2c8;
+    --ink-dim:#c9b48c;
+    --ink-dimmer:#8f7c5a;
+  }
+
+  /* Cozy — warm cream, soft tan, terracotta + sage accents */
+  body.cozy{
+    --bg:#faf1e6;
+    --bg-raised:#fffaf3;
+    --bg-raised-2:#f3e6d3;
+    --line:#e8d5bb;
+    --line-soft:#efe2cd;
+    --ink:#3b2b20;
+    --ink-dim:#7a6650;
+    --ink-dimmer:#a3907a;
+  }
+
+  /* Smooth, fluid theme switching — every themed surface eases into its new colors
+     instead of snapping, whether it's a preset swap, an accent tweak, or a font change. */
+  body, .top-stack, .rail, .hero, .settings-card, .class-card, .group-card, .search-card,
+  .student-row, .locked-bar, .rate-pill, .tag, .btn, .tab-btn, .student-badge,
+  input, select, textarea, .confirm-box{
+    transition: background-color .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease;
+  }
+
+  /* Modern themed scrollbar — colors follow whichever theme is active automatically */
+  ::-webkit-scrollbar{ width:11px; height:11px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{
+    background-color: var(--line);
+    border-radius:20px;
+    border:3px solid var(--bg);
+    background-clip:padding-box;
+    transition: background-color .25s ease;
+  }
+  ::-webkit-scrollbar-thumb:hover{ background-color: var(--ink-dimmer); }
+  ::-webkit-scrollbar-corner{ background:transparent; }
+  *{ scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 
   *{ box-sizing:border-box; }
   html{ scroll-behavior:smooth; }
@@ -274,9 +320,16 @@
   .settings-card{ border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-raised); padding:20px; }
   .settings-card h3{ font-family:var(--display); font-size:14.5px; margin:0 0 14px; }
   .swatch-row{ display:flex; gap:10px; align-items:center; }
-  .theme-toggle{ display:flex; gap:8px; }
+  .theme-toggle{ display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:8px; }
   .theme-toggle .btn{ flex:1; }
   .theme-toggle .btn.active{ background:var(--orange); color:#0c0c0e; border-color:var(--orange); }
+
+  .zoom-control{ display:flex; align-items:center; gap:10px; }
+  .zoom-btn{ all:unset; cursor:pointer; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    font-family:var(--body); font-weight:800; font-size:16px; color:var(--ink); background:var(--bg-raised-2);
+    border:1px solid var(--line); border-radius:8px; transition:background-color .2s ease, border-color .2s ease; }
+  .zoom-btn:hover{ border-color:var(--orange); }
+  .zoom-value{ min-width:52px; text-align:center; font-weight:700; font-size:13.5px; font-family:var(--display); }
 
   footer.credit{ text-align:center; padding:50px 0 10px; color:var(--ink-dimmer); font-size:12.5px; }
 
@@ -571,14 +624,35 @@
     <div class="settings-grid">
       <div class="settings-card">
         <h3>Appearance</h3>
-        <div class="field" style="margin-bottom:14px">
+        <div class="field" style="margin-bottom:16px">
           <label class="flabel">Theme</label>
           <div class="theme-toggle">
-            <button class="btn" id="btnThemeDark">Dark</button>
-            <button class="btn" id="btnThemeLight">Light</button>
+            <button class="btn theme-preset-btn" data-theme="dark">Dark</button>
+            <button class="btn theme-preset-btn" data-theme="light">Light</button>
+            <button class="btn theme-preset-btn" data-theme="medieval">Medieval</button>
+            <button class="btn theme-preset-btn" data-theme="cozy">Cozy</button>
           </div>
         </div>
-        <div class="field-row">
+
+        <div class="field" style="margin-bottom:16px">
+          <label class="flabel">Font</label>
+          <select id="fontPairingSelect">
+            <option value="modern">Modern (Archivo)</option>
+            <option value="medieval">Medieval (Cinzel + Garamond)</option>
+            <option value="cozy">Cozy (Fredoka + Nunito)</option>
+            <option value="elegant">Elegant (Playfair + Source Serif)</option>
+          </select>
+        </div>
+
+        <div class="field-row" style="margin-bottom:16px">
+          <div class="field">
+            <label class="flabel">Background</label>
+            <input type="color" id="customBgColor">
+          </div>
+          <div class="field">
+            <label class="flabel">Text</label>
+            <input type="color" id="customTextColor">
+          </div>
           <div class="field">
             <label class="flabel">Primary accent</label>
             <input type="color" id="accent1">
@@ -586,6 +660,19 @@
           <div class="field">
             <label class="flabel">Secondary accent</label>
             <input type="color" id="accent2">
+          </div>
+        </div>
+        <div class="field-row" style="margin-bottom:16px">
+          <button class="btn ghost" id="btnResetColors">Reset colors to theme defaults</button>
+        </div>
+
+        <div class="field">
+          <label class="flabel">Interface size</label>
+          <div class="zoom-control">
+            <button class="zoom-btn" id="zoomOut">−</button>
+            <span class="zoom-value" id="zoomValue">100%</span>
+            <button class="zoom-btn" id="zoomIn">+</button>
+            <button class="btn ghost" id="zoomReset" style="margin-left:6px">Reset</button>
           </div>
         </div>
       </div>
@@ -755,7 +842,7 @@ let state = {
   classes: [],
   lessons: [],
   importedLessons: [],
-  settings: { theme:"dark", accent1:"#ff6a1f", accent2:"#34d1b8", currency:"$", defaultDuration:60 }
+  settings: { theme:"dark", accent1:"#ff6a1f", accent2:"#34d1b8", customBg:null, customText:null, fontPairing:"modern", uiZoom:100, currency:"$", defaultDuration:60 }
 };
 
 function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1304,21 +1391,76 @@ function showConfirmCustom({ title, msg, buttons }){
 }
 
 /* ============ THEME ============ */
+const THEME_PRESET_DEFAULTS = {
+  dark:     { bg:"#0c0c0e", ink:"#f2efe9", accent1:"#ff6a1f", accent2:"#34d1b8", font:"modern" },
+  light:    { bg:"#f7f5f1", ink:"#18181a", accent1:"#ff6a1f", accent2:"#34d1b8", font:"modern" },
+  medieval: { bg:"#1a140d", ink:"#f0e2c8", accent1:"#c9922b", accent2:"#6b8f5a", font:"medieval" },
+  cozy:     { bg:"#faf1e6", ink:"#3b2b20", accent1:"#e0703f", accent2:"#7c9473", font:"cozy" }
+};
+const FONT_PAIRINGS = {
+  modern:   { display:'"Archivo Expanded", sans-serif', body:'"Archivo", sans-serif' },
+  medieval: { display:'"Cinzel", serif', body:'"EB Garamond", serif' },
+  cozy:     { display:'"Fredoka", sans-serif', body:'"Nunito", sans-serif' },
+  elegant:  { display:'"Playfair Display", serif', body:'"Source Serif 4", serif' }
+};
+
 function applyTheme(){
-  document.body.classList.toggle("light", state.settings.theme === "light");
-  const a1 = state.settings.accent1 || "#ff6a1f";
-  const a2 = state.settings.accent2 || "#34d1b8";
-  const root = document.documentElement.style;
-  root.setProperty("--orange", a1);
-  root.setProperty("--orange-dim", a1 + "33");
-  root.setProperty("--teal", a2);
-  root.setProperty("--teal-dim", a2 + "33");
-  document.getElementById("btnThemeDark").classList.toggle("active", state.settings.theme !== "light");
-  document.getElementById("btnThemeLight").classList.toggle("active", state.settings.theme === "light");
+  const theme = THEME_PRESET_DEFAULTS[state.settings.theme] ? state.settings.theme : "dark";
+  const preset = THEME_PRESET_DEFAULTS[theme];
+
+  document.body.classList.remove("light","medieval","cozy");
+  if(theme !== "dark") document.body.classList.add(theme);
+
+  const a1 = state.settings.accent1 || preset.accent1;
+  const a2 = state.settings.accent2 || preset.accent2;
+  const fontId = FONT_PAIRINGS[state.settings.fontPairing] ? state.settings.fontPairing : preset.font;
+  const font = FONT_PAIRINGS[fontId];
+
+  // Applied on body.style so it wins over the theme's own class rule (same-element
+  // inline style beats a class selector) — this is what lets a custom color override
+  // sit on top of any preset instead of needing its own theme.
+  const b = document.body.style;
+  b.setProperty("--orange", a1);
+  b.setProperty("--orange-dim", a1 + "33");
+  b.setProperty("--teal", a2);
+  b.setProperty("--teal-dim", a2 + "33");
+  b.setProperty("--display", font.display);
+  b.setProperty("--body", font.body);
+  if(state.settings.customBg) b.setProperty("--bg", state.settings.customBg); else b.removeProperty("--bg");
+  if(state.settings.customText) b.setProperty("--ink", state.settings.customText); else b.removeProperty("--ink");
+
+  document.querySelectorAll(".theme-preset-btn").forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.theme === theme);
+  });
+  document.getElementById("fontPairingSelect").value = fontId;
   document.getElementById("accent1").value = a1;
   document.getElementById("accent2").value = a2;
+  document.getElementById("customBgColor").value = state.settings.customBg || preset.bg;
+  document.getElementById("customTextColor").value = state.settings.customText || preset.ink;
   document.getElementById("currencySym").value = state.settings.currency;
   document.getElementById("defaultDuration").value = state.settings.defaultDuration;
+
+  applyUiZoom();
+}
+
+/* ---- Interface size (zoom) ---- */
+// Desktop app: uses Electron's native page zoom (crisper than a CSS transform, and
+// the same mechanism as the View menu's Zoom In/Out). Web/PWA: falls back to CSS zoom.
+function applyUiZoom(){
+  const pct = state.settings.uiZoom || 100;
+  const factor = pct / 100;
+  if(hasNativeFiles() && window.nativeFiles.setZoomFactor){
+    window.nativeFiles.setZoomFactor(factor);
+  } else {
+    document.body.style.zoom = factor;
+  }
+  const zv = document.getElementById("zoomValue");
+  if(zv) zv.textContent = pct + "%";
+}
+function setUiZoom(pct){
+  state.settings.uiZoom = Math.max(75, Math.min(160, pct));
+  scheduleSave();
+  applyUiZoom();
 }
 
 /* ============ TABS ============ */
@@ -2202,10 +2344,44 @@ document.getElementById("btnResetMonth").addEventListener("click", ()=>{
 });
 
 /* ============ SETTINGS TAB ============ */
-document.getElementById("btnThemeDark").addEventListener("click", ()=>{ state.settings.theme="dark"; scheduleSave(); applyTheme(); });
-document.getElementById("btnThemeLight").addEventListener("click", ()=>{ state.settings.theme="light"; scheduleSave(); applyTheme(); });
+document.querySelectorAll(".theme-preset-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const theme = btn.dataset.theme;
+    const preset = THEME_PRESET_DEFAULTS[theme];
+    state.settings.theme = theme;
+    // A preset click gives a clean, coherent look: its own recommended accents/font,
+    // and clears any custom bg/text override so nothing from a previous theme lingers.
+    state.settings.accent1 = preset.accent1;
+    state.settings.accent2 = preset.accent2;
+    state.settings.fontPairing = preset.font;
+    state.settings.customBg = null;
+    state.settings.customText = null;
+    scheduleSave();
+    applyTheme();
+  });
+});
+document.getElementById("fontPairingSelect").addEventListener("change", e=>{
+  state.settings.fontPairing = e.target.value;
+  scheduleSave();
+  applyTheme();
+});
 document.getElementById("accent1").addEventListener("input", e=>{ state.settings.accent1 = e.target.value; scheduleSave(); applyTheme(); });
 document.getElementById("accent2").addEventListener("input", e=>{ state.settings.accent2 = e.target.value; scheduleSave(); applyTheme(); });
+document.getElementById("customBgColor").addEventListener("input", e=>{ state.settings.customBg = e.target.value; scheduleSave(); applyTheme(); });
+document.getElementById("customTextColor").addEventListener("input", e=>{ state.settings.customText = e.target.value; scheduleSave(); applyTheme(); });
+document.getElementById("btnResetColors").addEventListener("click", ()=>{
+  const preset = THEME_PRESET_DEFAULTS[state.settings.theme] ? state.settings.theme : "dark";
+  const p = THEME_PRESET_DEFAULTS[preset];
+  state.settings.accent1 = p.accent1;
+  state.settings.accent2 = p.accent2;
+  state.settings.customBg = null;
+  state.settings.customText = null;
+  scheduleSave();
+  applyTheme();
+});
+document.getElementById("zoomIn").addEventListener("click", ()=> setUiZoom((state.settings.uiZoom||100) + 10));
+document.getElementById("zoomOut").addEventListener("click", ()=> setUiZoom((state.settings.uiZoom||100) - 10));
+document.getElementById("zoomReset").addEventListener("click", ()=> setUiZoom(100));
 document.getElementById("currencySym").addEventListener("input", e=>{ state.settings.currency = e.target.value || "$"; scheduleSave(); renderHeroStats(); });
 document.getElementById("defaultDuration").addEventListener("input", e=>{ state.settings.defaultDuration = parseFloat(e.target.value) || 60; scheduleSave(); });
 
