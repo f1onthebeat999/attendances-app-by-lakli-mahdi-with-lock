@@ -2239,6 +2239,16 @@ document.getElementById("searchResults").addEventListener("click", e=>{
 });
 
 /* ============ HISTORY TAB ============ */
+// Parses a "YYYY-MM-DD" date string as LOCAL time components (not UTC) to avoid the
+// classic off-by-one-day bug that `new Date("YYYY-MM-DD")` can cause near midnight
+// in timezones behind UTC.
+function dayNameFromDate(dateStr){
+  if(!dateStr) return "";
+  const [y,m,d] = dateStr.split("-").map(Number);
+  if(!y || !m || !d) return "";
+  return new Date(y, m-1, d).toLocaleDateString(undefined, { weekday: "long" });
+}
+
 function renderHistory(){
   const filterSel = document.getElementById("histFilter");
   const prev = filterSel.value;
@@ -2262,7 +2272,7 @@ function renderHistory(){
     <div class="lesson-row" data-lesson="${l.id}">
       <div class="lesson-main">
         <div class="lesson-title">${esc(l.className)} · ${esc(l.groupName)}</div>
-        <div class="lesson-sub">${esc(l.date)} · ${l.duration} min</div>
+        <div class="lesson-sub">${dayNameFromDate(l.date)}, ${esc(l.date)} · ${l.duration} min</div>
       </div>
       <div class="lesson-stats">
         <span><b>${present}</b> present</span>
