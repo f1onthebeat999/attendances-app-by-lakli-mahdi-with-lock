@@ -165,7 +165,7 @@ const SALARY_LOCK_DEFAULT_PASSWORD = "1234";  // change via lock-salary.json —
 // ---------- GitHub cloud sync ----------
 // Sign-in via GitHub's Device Flow (no client secret needed — safe to ship this ID).
 // Register your own at github.com/settings/developers -> OAuth Apps -> enable "Device Flow".
-const GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_OAUTH_APP_CLIENT_ID";
+const GITHUB_CLIENT_ID = "Ov23li2zswRfn1BRNMw6";
 
 // Each signed-in user gets exactly one auto-created private repo under their own
 // account. We never touch anyone else's repos, and never see their password —
